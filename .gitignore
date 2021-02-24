@@ -1,0 +1,6 @@
+*.o
+*.pcap
+
+builddir/
+.vscode/
+.idea/

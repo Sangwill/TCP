@@ -1,0 +1,504 @@
+#include "tcp.h"
+#include "common.h"
+#include "timers.h"
+#include <assert.h>
+#include <map>
+#include <stdio.h>
+
+// a list of TCP connections
+std::vector<TCP *> tcp_connections;
+
+// mapping from fd to TCP connection
+std::map<int, TCP *> tcp_fds;
+
+// some helper functions
+void construct_ip_header(uint8_t *buffer, const TCP *tcp,
+                         uint16_t total_length) {
+  IPHeader *ip_hdr = (IPHeader *)buffer;
+  memset(ip_hdr, 0, 20);
+  ip_hdr->ip_v = 4;
+  ip_hdr->ip_hl = 5;
+  ip_hdr->ip_len = htons(total_length);
+  ip_hdr->ip_ttl = 64;
+  ip_hdr->ip_p = 6; // TCP
+  ip_hdr->ip_src = tcp->local_ip;
+  ip_hdr->ip_dst = tcp->remote_ip;
+}
+
+void update_tcp_ip_checksum(uint8_t *buffer) {
+  IPHeader *ip_hdr = (IPHeader *)buffer;
+  TCPHeader *tcp_hdr = (TCPHeader *)(buffer + ip_hdr->ip_hl * 4);
+  update_tcp_checksum(ip_hdr, tcp_hdr);
+  update_ip_checksum(ip_hdr);
+}
+
+void process_tcp(const IPHeader *ip, const uint8_t *data, size_t size) {
+  TCPHeader *tcp_header = (TCPHeader *)data;
+  if (!verify_tcp_checksum(ip, tcp_header)) {
+    printf("Bad TCP checksum\n");
+    return;
+  }
+
+  // SEG.SEQ
+  uint32_t seg_seq = ntohl(tcp_header->seq);
+  // SEG.ACK
+  uint32_t seg_ack = ntohl(tcp_header->ack_seq);
+  // SEG.WND
+  uint16_t seg_wnd = ntohs(tcp_header->window);
+  // segment(payload) length
+  uint32_t seg_len = ntohs(ip->ip_len) - ip->ip_hl * 4 - tcp_header->doff * 4;
+  const uint8_t *payload = data + tcp_header->doff * 4;
+
+  for (auto &tcp : tcp_connections) {
+    if (tcp->local_ip == ip->ip_dst && tcp->remote_ip == ip->ip_src &&
+        tcp->local_port == ntohs(tcp_header->dest) &&
+        tcp->remote_port == ntohs(tcp_header->source)) {
+      // matched
+      if (tcp_header->doff > 20 / 4) {
+        // options exists
+        // check TCP option header: MSS
+        uint8_t *opt_ptr = (uint8_t *)data + 20;
+        uint8_t *opt_end = (uint8_t *)data + tcp_header->doff * 4;
+        while (opt_ptr < opt_end) {
+          if (*opt_ptr == 0x00) {
+            // End Of Option List
+            break;
+          } else if (*opt_ptr == 0x01) {
+            // No-Operation
+            opt_ptr++;
+          } else if (*opt_ptr == 0x02) {
+            // MSS
+            uint8_t len = opt_ptr[1];
+            if (len != 4) {
+              printf("Bad TCP option len: %d\n", len);
+              break;
+            }
+
+            uint16_t mss = ((uint16_t)opt_ptr[2] << 8) + opt_ptr[3];
+            if (tcp_header->syn) {
+              tcp->remote_mss = mss;
+              printf("Remote MSS is %d\n", mss);
+            } else {
+              printf("Remote sent MSS option header in !SYN packet.\n");
+            }
+            opt_ptr += len;
+          } else {
+            printf("Unrecognized TCP option: %d\n", *opt_ptr);
+            break;
+          }
+        }
+      }
+
+      if (tcp->state == TCPState::SYN_SENT) {
+        // rfc793 page 66
+        // "If the state is SYN-SENT then"
+        // "If the ACK bit is set"
+        if (tcp_header->ack) {
+          if (tcp_seq_le(seg_ack, tcp->iss) ||
+              tcp_seq_gt(seg_ack, tcp->snd_nxt)) {
+            // TODO: send a reset when !RST
+            printf("Send RST\n");
+            return;
+          }
+        }
+
+        // "second check the RST bit"
+        if (tcp_header->rst) {
+          printf("Connection reset.\n");
+          tcp->state = TCPState::CLOSED;
+          return;
+        }
+
+        // "fourth check the SYN bit"
+        if (tcp_header->syn) {
+          // update variables
+          // TODO(feature 1.1 basic 3-way handshake)
+
+          if (tcp_seq_gt(tcp->snd_una, tcp->iss)) {
+            // "our SYN has been ACKed"
+            // send ACK segment
+          } else {
+            // "Otherwise enter SYN-RECEIVED"
+          }
+        }
+
+        // "fifth, if neither of the SYN or RST bits is set then drop the
+        // segment and return."
+        if (!tcp_header->syn || !tcp_header->ack) {
+          printf("Received unexpected !SYN || !ACK packet in SYN_SENT state\n");
+          return;
+        }
+      }
+
+      // rfc793 page 69
+      // "Otherwise,"
+      if (tcp->state == TCPState::SYN_RCVD ||
+          tcp->state == TCPState::ESTABLISHED ||
+          tcp->state == TCPState::FIN_WAIT_1 ||
+          tcp->state == TCPState::FIN_WAIT_2 ||
+          tcp->state == TCPState::CLOSE_WAIT ||
+          tcp->state == TCPState::CLOSING || tcp->state == TCPState::LAST_ACK ||
+          tcp->state == TCPState::TIME_WAIT) {
+
+        // first check sequence number
+
+        // "There are four cases for the acceptability test for an incoming
+        // segment:"
+        bool acceptability = false;
+        // TODO
+
+        // "If an incoming segment is not acceptable, an acknowledgment
+        // should be sent in reply (unless the RST bit is set, if so drop
+        // the segment and return):"
+        // TODO
+
+        // "second check the RST bit,"
+        // TODO
+
+        // "fourth, check the SYN bit,"
+
+        // "fifth check the ACK field,"
+        if (tcp_header->ack) {
+          if (tcp->state == ESTABLISHED) {
+            // TODO(feature 5.1 send and receive window)
+            // "If SND.UNA < SEG.ACK =< SND.NXT then, set SND.UNA <- SEG.ACK."
+
+            // "If SND.UNA < SEG.ACK =< SND.NXT, the send window should be
+            // updated.  If (SND.WL1 < SEG.SEQ or (SND.WL1 = SEG.SEQ and
+            // SND.WL2 =< SEG.ACK)), set SND.WND <- SEG.WND, set
+            // SND.WL1 <- SEG.SEQ, and set SND.WL2 <- SEG.ACK."
+          }
+        }
+
+        // "seventh, process the segment text,"
+        if (seg_len > 0) {
+          if (tcp->state == ESTABLISHED) {
+            // "Once in the ESTABLISHED state, it is possible to deliver segment
+            // text to user RECEIVE buffers."
+            printf("Received %d bytes from server\n", seg_len);
+
+            // TODO(feature 4.2 simple client RECEIVE from server)
+            // write to recv buffer
+            tcp->rcv_nxt += seg_len;
+
+            // "Send an acknowledgment of the form:
+            // <SEQ=SND.NXT><ACK=RCV.NXT><CTL=ACK>"
+            // TODO
+          }
+        }
+
+        // "eighth, check the FIN bit,"
+        if (tcp_header->fin) {
+          // "If the FIN bit is set, signal the user "connection closing" and
+          // return any pending RECEIVEs with same message, advance RCV.NXT
+          // over the FIN, and send an acknowledgment for the FIN.  Note that
+          // FIN implies PUSH for any segment text not yet delivered to the
+          // user."
+          // TODO(feature 3.2 TCP receives a FIN from the network)
+
+          if (tcp->state == SYN_RCVD || tcp->state == ESTABLISHED) {
+            // advance RCV.NXT
+            // over the FIN, and send an acknowledgment for the FIN.
+            tcp->rcv_nxt++;
+
+            // send ACK segment
+            // TODO
+          }
+        }
+      }
+      return;
+    }
+  }
+
+  printf("No matching TCP connection found\n");
+  // send RST
+  // rfc793 page 65 CLOSED state
+  if (tcp_header->rst) {
+    // "An incoming segment containing a RST is discarded."
+    return;
+  }
+
+  // send RST segment
+  // 40 = 20(IP) + 20(TCP)
+  uint8_t buffer[40];
+  IPHeader *ip_hdr = (IPHeader *)buffer;
+  memset(ip_hdr, 0, 20);
+  ip_hdr->ip_v = 4;
+  ip_hdr->ip_hl = 5;
+  ip_hdr->ip_len = htons(sizeof(buffer));
+  ip_hdr->ip_ttl = 64;
+  ip_hdr->ip_p = 6; // TCP
+  ip_hdr->ip_src = ip->ip_dst;
+  ip_hdr->ip_dst = ip->ip_src;
+
+  // tcp
+  TCPHeader *tcp_hdr = (TCPHeader *)&buffer[20];
+  memset(tcp_hdr, 0, 20);
+  tcp_hdr->source = tcp_header->dest;
+  tcp_hdr->dest = tcp_header->source;
+  if (tcp_header->ack) {
+    // "If the ACK bit is off, sequence number zero is used,"
+    // "<SEQ=0>"
+    tcp_hdr->seq = 0;
+    // "<ACK=SEG.SEQ+SEG.LEN>"
+    tcp_hdr->ack_seq = htonl(seg_seq + seg_len);
+    // "<CTL=RST,ACK>"
+    tcp_hdr->rst = 1;
+    tcp_hdr->ack = 1;
+  } else {
+    // "If the ACK bit is on,"
+    // "<SEQ=SEG.ACK>"
+    tcp_hdr->seq = htonl(seg_ack);
+    // "<CTL=RST>"
+    tcp_hdr->rst = 1;
+  }
+  // flags
+  tcp_hdr->doff = 20 / 4; // 20 bytes
+
+  update_tcp_ip_checksum(buffer);
+  send_packet(buffer, sizeof(buffer));
+}
+
+void update_tcp_checksum(const IPHeader *ip, TCPHeader *tcp) {
+  uint32_t checksum = 0;
+
+  // pseudo header
+  // rfc793 page 17
+  uint8_t pseudo_header[12];
+  memcpy(&pseudo_header[0], &ip->ip_src, 4);
+  memcpy(&pseudo_header[4], &ip->ip_dst, 4);
+  // zero
+  pseudo_header[8] = 0;
+  // proto tcp
+  pseudo_header[9] = 6;
+  // TCP length (header + payload)
+  be16_t tcp_len = htons(ntohs(ip->ip_len) - ip->ip_hl * 4);
+  memcpy(&pseudo_header[10], &tcp_len, 2);
+  for (int i = 0; i < 6; i++) {
+    checksum +=
+        (((uint32_t)pseudo_header[i * 2]) << 8) + pseudo_header[i * 2 + 1];
+  }
+
+  // "The checksum field is the 16 bit one's complement of the one's
+  // complement sum of all 16 bit words in the header and text."
+
+  // TCP header
+  uint8_t *tcp_data = (uint8_t *)tcp;
+  tcp->checksum = 0;
+  for (int i = 0; i < tcp->doff * 2; i++) {
+    checksum += (((uint32_t)tcp_data[i * 2]) << 8) + tcp_data[i * 2 + 1];
+  }
+
+  // TCP payload
+  uint8_t *payload = tcp_data + tcp->doff * 4;
+  int payload_len = ntohs(ip->ip_len) - ip->ip_hl * 4 - tcp->doff * 4;
+  for (int i = 0; i < payload_len; i++) {
+    if ((i % 2) == 0) {
+      checksum += (((uint32_t)payload[i]) << 8);
+    } else {
+      checksum += payload[i];
+    }
+  }
+
+  while (checksum >= 0x10000) {
+    checksum -= 0x10000;
+    checksum += 1;
+  }
+  // update
+  tcp->checksum = htons(~checksum);
+}
+
+bool verify_tcp_checksum(const IPHeader *ip, const TCPHeader *tcp) {
+  uint32_t checksum = 0;
+
+  // pseudo header
+  // rfc793 page 17
+  uint8_t pseudo_header[12];
+  memcpy(&pseudo_header[0], &ip->ip_src, 4);
+  memcpy(&pseudo_header[4], &ip->ip_dst, 4);
+  // zero
+  pseudo_header[8] = 0;
+  // proto tcp
+  pseudo_header[9] = 6;
+  // TCP length (header + payload)
+  be16_t tcp_len = htons(ntohs(ip->ip_len) - ip->ip_hl * 4);
+  memcpy(&pseudo_header[10], &tcp_len, 2);
+  for (int i = 0; i < 6; i++) {
+    checksum +=
+        (((uint32_t)pseudo_header[i * 2]) << 8) + pseudo_header[i * 2 + 1];
+  }
+
+  // "The checksum field is the 16 bit one's complement of the one's
+  // complement sum of all 16 bit words in the header and text."
+
+  // TCP header
+  uint8_t *tcp_data = (uint8_t *)tcp;
+  for (int i = 0; i < tcp->doff * 2; i++) {
+    checksum += (((uint32_t)tcp_data[i * 2]) << 8) + tcp_data[i * 2 + 1];
+  }
+
+  // TCP payload
+  uint8_t *payload = tcp_data + tcp->doff * 4;
+  int payload_len = ntohs(ip->ip_len) - ip->ip_hl * 4 - tcp->doff * 4;
+  for (int i = 0; i < payload_len; i++) {
+    if ((i % 2) == 0) {
+      checksum += (((uint32_t)payload[i]) << 8);
+    } else {
+      checksum += payload[i];
+    }
+  }
+
+  while (checksum >= 0x10000) {
+    checksum -= 0x10000;
+    checksum += 1;
+  }
+  return checksum == 0xffff;
+}
+
+// TODO(feature 2.1 sequence arithmetic)
+bool tcp_seq_lt(uint32_t a, uint32_t b) { return true; }
+
+bool tcp_seq_le(uint32_t a, uint32_t b) { return true; }
+
+bool tcp_seq_gt(uint32_t a, uint32_t b) { return true; }
+
+bool tcp_seq_ge(uint32_t a, uint32_t b) { return true; }
+
+// returns fd
+int tcp_socket() {
+  for (int i = 0;; i++) {
+    if (tcp_fds.find(i) == tcp_fds.end()) {
+      // not found, create
+      tcp_fds[i] = new TCP;
+      return i;
+    }
+  }
+}
+
+void tcp_connect(int fd, uint32_t dst_addr, uint16_t dst_port) {
+  TCP *tcp = tcp_fds[fd];
+
+  tcp->local_ip = client_ip;
+  // random local port
+  tcp->local_port = 40000 + (rand() % 10000);
+  tcp->remote_ip = dst_addr;
+  tcp->remote_port = dst_port;
+
+  // initialize params
+  // assume maximum mss for remote by default
+  tcp->local_mss = tcp->remote_mss = DEFAULT_MSS;
+
+  // initial sequence number based on timestamp
+  // rfc793 page 27 or rfc6528
+  // TODO(feature 2.2 initial sequence number selection)
+  uint32_t initial_seq = 0;
+  // rfc793 page 54 OPEN Call CLOSED STATE
+  tcp->iss = initial_seq;
+  // only one unacknowledged number: initial_seq
+  tcp->snd_una = initial_seq;
+  tcp->snd_nxt = initial_seq + 1;
+  tcp->snd_wnd = 0;
+  tcp->rcv_wnd = tcp->recv.free_bytes();
+  tcp->snd_wl2 = initial_seq - 1;
+
+  // send SYN to remote
+  // 44 = 20(IP) + 24(TCP)
+  // with 4 bytes option(MSS)
+  uint8_t buffer[44];
+  construct_ip_header(buffer, tcp, sizeof(buffer));
+
+  // tcp
+  TCPHeader *tcp_hdr = (TCPHeader *)&buffer[20];
+  memset(tcp_hdr, 0, 20);
+  tcp_hdr->source = htons(tcp->local_port);
+  tcp_hdr->dest = htons(tcp->remote_port);
+  tcp_hdr->seq = htonl(initial_seq);
+  // flags
+  tcp_hdr->doff = 24 / 4; // 24 bytes
+  tcp_hdr->syn = 1;
+  // TODO(feature 5.1 send and receive window)
+  // windows size: size of empty bytes in recv buffer
+  tcp_hdr->window = 0;
+  // mss option, rfc793 page 18
+  buffer[40] = 0x02; // kind
+  buffer[41] = 0x04; // length
+  buffer[42] = tcp->local_mss >> 8;
+  buffer[43] = tcp->local_mss;
+
+  update_tcp_ip_checksum(buffer);
+  send_packet(buffer, sizeof(buffer));
+
+  tcp->state = TCPState::SYN_SENT;
+
+  tcp_connections.push_back(tcp);
+  return;
+}
+
+ssize_t tcp_write(int fd, const uint8_t *data, size_t size) {
+  // TODO(feature 4.1 simple client SEND to server)
+  TCP *tcp = tcp_fds[fd];
+
+  // rfc793 page 56 SEND Call
+  if (tcp->state == TCPState::SYN_SENT || tcp->state == TCPState::SYN_RCVD) {
+    // queue data for transmission
+    return tcp->send.write(data, size);
+  } else if (tcp->state == TCPState::ESTABLISHED ||
+             tcp->state == TCPState::CLOSE_WAIT) {
+    // queue data for transmission
+    size_t res = tcp->send.write(data, size);
+
+    // send data to remote
+    size_t bytes_to_send = tcp->send.size;
+    // consider mss and send sequence space
+    // TODO
+    size_t segment_len = 0;
+    if (segment_len > 0) {
+      printf("Sending segment of len %d to remote\n", segment_len);
+      // send data now
+
+      // 20 IP header & 20 TCP header
+      uint16_t total_length = 20 + 20 + segment_len;
+      uint8_t buffer[MTU];
+      construct_ip_header(buffer, tcp, total_length);
+
+      // tcp
+      TCPHeader *tcp_hdr = (TCPHeader *)&buffer[20];
+      memset(tcp_hdr, 0, 20);
+      tcp_hdr->source = htons(tcp->local_port);
+      tcp_hdr->dest = htons(tcp->remote_port);
+      // this segment occupies range:
+      // [snd_nxt, snd_nxt+seg_len)
+      tcp_hdr->seq = htonl(tcp->snd_nxt);
+      tcp->snd_nxt += segment_len;
+      // flags
+      tcp_hdr->doff = 20 / 4; // 20 bytes
+
+      // TODO(feature 5.1 send and receive window)
+      // windows size: size of empty bytes in recv buffer
+      tcp_hdr->window = 0;
+
+      // payload
+      size_t bytes_read = tcp->send.read(&buffer[40], segment_len);
+      // should never fail
+      assert(bytes_read == segment_len);
+
+      update_tcp_ip_checksum(buffer);
+      send_packet(buffer, total_length);
+    }
+
+    return res;
+  }
+  return -1;
+}
+
+ssize_t tcp_read(int fd, uint8_t *data, size_t size) {
+  // TODO(feature 4.2 simple client RECEIVE from server)
+  TCP *tcp = tcp_fds[fd];
+  return 0;
+}
+
+void tcp_shutdown(int fd, bool readHalf, bool writeHalf) {
+  // TODO(feature 3.1 local user initiates the close)
+}
+
+void tcp_close(int fd) {}
