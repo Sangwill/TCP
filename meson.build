@@ -58,22 +58,37 @@ lwip_lib = static_library('lwip',
                           cpp_args : '-fno-common',
                           include_directories: lwip_incdir)
 
-executable('client',
+client = executable('client',
            'src/client/client.cpp',
            link_with: lwip_lib,
            include_directories: lwip_incdir)
 
-executable('server',
+server = executable('server',
            'src/server/server.cpp',
            link_with: lwip_lib,
            include_directories: lwip_incdir)
 
 incdir = include_directories('include')
 
-executable('lab',
+lab = executable('lab',
            'src/lab/lab.cpp',
            'src/lab/timers.cpp',
            'src/lab/ip.cpp',
            'src/lab/tcp.cpp',
            'src/common.cpp',
            include_directories: incdir)
+
+run_target('run-server',
+  depends: [server],
+  command : [server, '-l', 's', '-r', 'c', '-p', 'server.pcap']
+)
+
+run_target('run-client',
+  depends: [client],
+  command : [client, '-l', 'c', '-r', 's', '-p', 'client.pcap']
+)
+
+run_target('run-lab',
+  depends: [lab],
+  command : [lab, '-l', 'c', '-r', 's', '-p', 'lab.pcap']
+)
