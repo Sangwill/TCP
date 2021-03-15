@@ -104,5 +104,5 @@ run_target('run-lab-client',
 
 run_target('run-lab-server',
   depends: [lab_server],
-  command : [lab_server, '-l', 'c', '-r', 's', '-p', 'lab-server.pcap']
+  command : [lab_server, '-l', 's', '-r', 'c', '-p', 'lab-server.pcap']
 )
