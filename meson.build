@@ -70,12 +70,21 @@ server = executable('server',
 
 incdir = include_directories('include')
 
-lab = executable('lab',
-           'src/lab/lab.cpp',
-           'src/lab/timers.cpp',
-           'src/lab/ip.cpp',
-           'src/lab/tcp.cpp',
-           'src/common.cpp',
+lab_sources = [
+        'src/lab/timers.cpp',
+        'src/lab/ip.cpp',
+        'src/lab/tcp.cpp',
+        'src/common.cpp',
+]
+
+lab_client = executable('lab-client',
+            lab_sources,
+           'src/lab/lab-client.cpp',
+           include_directories: incdir)
+
+lab_server = executable('lab-server',
+            lab_sources,
+           'src/lab/lab-server.cpp',
            include_directories: incdir)
 
 run_target('run-server',
@@ -88,7 +97,12 @@ run_target('run-client',
   command : [client, '-l', 'c', '-r', 's', '-p', 'client.pcap']
 )
 
-run_target('run-lab',
-  depends: [lab],
-  command : [lab, '-l', 'c', '-r', 's', '-p', 'lab.pcap']
+run_target('run-lab-client',
+  depends: [lab_client],
+  command : [lab_client, '-l', 'c', '-r', 's', '-p', 'lab.pcap']
+)
+
+run_target('run-lab-server',
+  depends: [lab_server],
+  command : [lab_server, '-l', 'c', '-r', 's', '-p', 'lab.pcap']
 )
