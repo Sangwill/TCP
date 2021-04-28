@@ -236,7 +236,7 @@ void process_tcp(const IPHeader *ip, const uint8_t *data, size_t size) {
   memset(tcp_hdr, 0, 20);
   tcp_hdr->source = tcp_header->dest;
   tcp_hdr->dest = tcp_header->source;
-  if (tcp_header->ack) {
+  if (!tcp_header->ack) {
     // "If the ACK bit is off, sequence number zero is used,"
     // "<SEQ=0>"
     tcp_hdr->seq = 0;
