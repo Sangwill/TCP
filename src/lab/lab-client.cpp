@@ -119,6 +119,7 @@ int main(int argc, char *argv[]) {
       TIMERS.schedule_job(write_fn, 1000);
     }
   };
+  TIMERS.schedule_job(write_fn, 1000);
 
   const size_t buffer_size = 1500;
   uint8_t buffer[buffer_size];
