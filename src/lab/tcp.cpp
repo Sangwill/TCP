@@ -537,6 +537,7 @@ void tcp_connect(int fd, uint32_t dst_addr, uint16_t dst_port) {
 ssize_t tcp_write(int fd, const uint8_t *data, size_t size) {
   // TODO(feature 4.1 simple client SEND to server)
   TCP *tcp = tcp_fds[fd];
+  assert(tcp);
 
   // rfc793 page 56 SEND Call
   if (tcp->state == TCPState::SYN_SENT || tcp->state == TCPState::SYN_RCVD) {
@@ -594,6 +595,8 @@ ssize_t tcp_write(int fd, const uint8_t *data, size_t size) {
 ssize_t tcp_read(int fd, uint8_t *data, size_t size) {
   // TODO(feature 4.2 simple client RECEIVE from server)
   TCP *tcp = tcp_fds[fd];
+  assert(tcp);
+
   return 0;
 }
 
@@ -605,6 +608,8 @@ void tcp_close(int fd) {}
 
 void tcp_bind(int fd, be32_t addr, uint16_t port) {
   TCP *tcp = tcp_fds[fd];
+  assert(tcp);
+
   tcp->local_ip = addr;
   tcp->local_port = port;
   // wildcard
@@ -614,6 +619,7 @@ void tcp_bind(int fd, be32_t addr, uint16_t port) {
 
 void tcp_listen(int fd) {
   TCP *tcp = tcp_fds[fd];
+  assert(tcp);
 
   // enter listen state
   tcp->state = TCPState::LISTEN;
