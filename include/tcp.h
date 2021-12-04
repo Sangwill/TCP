@@ -3,11 +3,11 @@
 
 #include "common.h"
 #include "ip.h"
+#include <queue>
 #include <stdint.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <vector>
-#include <queue>
 
 // default MSS is MTU - 20 - 20 for TCP over IPv4
 #define DEFAULT_MSS (MTU - 20 - 20)
@@ -99,7 +99,7 @@ struct TCP {
   uint32_t snd_wnd; // constrained by remote
   uint32_t snd_wl1;
   uint32_t snd_wl2;
-  uint32_t iss;     // initial send sequence number
+  uint32_t iss; // initial send sequence number
 
   // see rfc793 page 20 fig 5 recv sequence space
   // https://www.rfc-editor.org/rfc/rfc793.html#page-20
@@ -114,6 +114,9 @@ struct TCP {
 };
 
 extern std::vector<TCP *> tcp_connections;
+
+// generate initial seq
+uint32_t generate_initial_seq();
 
 // process received TCP
 void process_tcp(const IPHeader *ip, const uint8_t *data, size_t size);

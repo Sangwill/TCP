@@ -112,3 +112,11 @@ run_target('run-lab-server',
   depends: [lab_server],
   command : [lab_server, '-l', 's', '-r', 'c', '-p', 'lab-server.pcap']
 )
+
+# testing
+test_initial_seq = executable('test-initial-seq',
+            lab_sources,
+            common_sources,
+            'src/test/test_initial_seq.cpp',
+            include_directories: incdir)
+test('test initial seq generation', test_initial_seq)
