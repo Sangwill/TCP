@@ -286,6 +286,7 @@ void process_tcp(const IPHeader *ip, const uint8_t *data, size_t size) {
             // and send it.
           }
 
+          // ESTABLISHED STATE
           if (tcp->state == ESTABLISHED) {
             // TODO(feature 5.1 send and receive window)
             // "If SND.UNA < SEG.ACK =< SND.NXT then, set SND.UNA <- SEG.ACK."
