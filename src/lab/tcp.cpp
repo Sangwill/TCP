@@ -73,10 +73,12 @@ void process_tcp(const IPHeader *ip, const uint8_t *data, size_t size) {
         if (tcp->remote_ip != 0 && tcp->remote_ip != ip->ip_src) {
           continue;
         }
-        if (tcp->local_port != 0 && tcp->local_port != ntohs(tcp_header->dest)) {
+        if (tcp->local_port != 0 &&
+            tcp->local_port != ntohs(tcp_header->dest)) {
           continue;
         }
-        if (tcp->remote_port != 0 && tcp->remote_port != ntohs(tcp_header->source)) {
+        if (tcp->remote_port != 0 &&
+            tcp->remote_port != ntohs(tcp_header->source)) {
           continue;
         }
       }
@@ -549,4 +551,22 @@ void tcp_listen(int fd) {
   tcp->state = TCPState::LISTEN;
 }
 
-int tcp_accept(int fd) { return -1; }
+int tcp_accept(int fd) {
+  TCP *tcp = tcp_fds[fd];
+  assert(tcp);
+
+  // pop fd from accept queue
+  if (tcp->accept_queue.empty()) {
+    return -1;
+  } else {
+    int fd = tcp->accept_queue.front();
+    tcp->accept_queue.pop_front();
+    return fd;
+  }
+}
+
+TCPState tcp_state(int fd) {
+  TCP *tcp = tcp_fds[fd];
+  assert(tcp);
+  return tcp->state;
+}

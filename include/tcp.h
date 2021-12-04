@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <vector>
+#include <queue>
 
 // default MSS is MTU - 20 - 20 for TCP over IPv4
 #define DEFAULT_MSS (MTU - 20 - 20)
@@ -105,6 +106,9 @@ struct TCP {
   // rcv_wnd always equals to this->recv.free_bytes()
   uint32_t rcv_wnd;
   uint32_t irs; // initial recv sequence number
+
+  // pending accept queue
+  std::deque<int> accept_queue;
 };
 
 extern std::vector<TCP *> tcp_connections;
@@ -158,5 +162,8 @@ void tcp_listen(int fd);
 // accept TCP connection if exists
 // return new fd if a client is connecting, otherwise -1
 int tcp_accept(int fd);
+
+// get tcp state
+TCPState tcp_state(int fd);
 
 #endif

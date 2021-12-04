@@ -47,6 +47,11 @@ int main(int argc, char *argv[]) {
   int index = 0;
   size_t offset = 0;
   timer_fn write_fn = [&] {
+    if (tcp_state(tcp_fd) != TCPState::ESTABLISHED) {
+      printf("Waiting for connection establishment\n");
+      return 1000;
+    }
+
     const char *p = data[index];
     size_t len = strlen(p);
     ssize_t res = tcp_write(tcp_fd, (const uint8_t *)p + offset, len - offset);
