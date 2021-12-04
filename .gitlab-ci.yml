@@ -1,5 +1,5 @@
 test:
-  image: debian:stable
+  image: jiegec/tcp-lab-x86_64
   script:
     # DO NOT EDIT!
     - apt update
