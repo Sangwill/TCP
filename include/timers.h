@@ -6,7 +6,9 @@
 #include <stdint.h>
 #include <vector>
 
-typedef std::function<void()> timer_fn;
+// return -1 means break
+// return >=0 means schedule in res ms
+typedef std::function<int()> timer_fn;
 
 // Return monotonic timestamp in msecs
 uint64_t current_ts_msec();

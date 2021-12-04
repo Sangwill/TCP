@@ -22,7 +22,7 @@ int main(int argc, char *argv[]) {
 
   // always try to read from tcp
   // and write to stdout
-  std::function<void()> read_fn = [&] {
+  timer_fn read_fn = [&] {
     char buffer[1024];
     ssize_t res = tcp_read(tcp_fd, (uint8_t *)buffer, sizeof(buffer) - 1);
     if (res > 0) {
@@ -32,7 +32,7 @@ int main(int argc, char *argv[]) {
     }
 
     // next data
-    TIMERS.schedule_job(read_fn, 1000);
+    return 1000;
   };
   TIMERS.schedule_job(read_fn, 1000);
 
@@ -46,7 +46,7 @@ int main(int argc, char *argv[]) {
   };
   int index = 0;
   size_t offset = 0;
-  std::function<void()> write_fn = [&] {
+  timer_fn write_fn = [&] {
     const char *p = data[index];
     size_t len = strlen(p);
     ssize_t res = tcp_write(tcp_fd, (const uint8_t *)p + offset, len - offset);
@@ -63,7 +63,9 @@ int main(int argc, char *argv[]) {
 
     // next data
     if (index < 5) {
-      TIMERS.schedule_job(write_fn, 1000);
+      return 1000;
+    } else {
+      return -1;
     }
   };
   TIMERS.schedule_job(write_fn, 1000);
