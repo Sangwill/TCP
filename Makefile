@@ -30,3 +30,6 @@ run-lab-client: builddir
 
 run-lab-server: builddir
 	ninja -C builddir run-lab-server
+
+test: builddir
+	ninja -C builddir test
