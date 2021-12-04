@@ -8,8 +8,15 @@
 
 #include "common.h"
 #include "lwip/arch.h"
+#include "lwip/dhcp.h"
+#include "lwip/etharp.h"
+#include "lwip/init.h"
+#include "lwip/netif.h"
+#include "lwip/opt.h"
 #include "lwip/timeouts.h"
 #include "lwip_common.h"
+
+struct netif netif;
 
 // support functions for lwip
 extern "C" {
@@ -54,4 +61,17 @@ void loop_yield() {
     time = 50;
   }
   usleep(time * 1000);
+}
+
+void setup_lwip(const char *ip) {
+  lwip_init();
+  ip_addr_t client_addr = ip4_from_string(ip);
+  ip_addr_t netmask = ip4_from_string("255.255.255.0");
+  netif_add(&netif, &client_addr, &netmask, IP4_ADDR_ANY, NULL, netif_init,
+            netif_input);
+  netif.name[0] = 'e';
+  netif.name[1] = '0';
+  netif_set_default(&netif);
+  netif_set_up(&netif);
+  netif_set_link_up(&netif);
 }

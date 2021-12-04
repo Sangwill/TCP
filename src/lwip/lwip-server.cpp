@@ -22,17 +22,8 @@ int main(int argc, char *argv[]) {
   parse_argv(argc, argv);
 
   // init lwip
-  struct netif netif;
-  lwip_init();
-  ip_addr_t server_addr = ip4_from_string("10.0.0.1");
-  ip_addr_t netmask = ip4_from_string("255.255.255.0");
-  netif_add(&netif, &server_addr, &netmask, IP4_ADDR_ANY, NULL, netif_init,
-            netif_input);
-  netif.name[0] = 'e';
-  netif.name[1] = '0';
-  netif_set_default(&netif);
-  netif_set_up(&netif);
-  netif_set_link_up(&netif);
+  setup_lwip("10.0.0.1");
+
   httpd_init();
 
   const size_t buffer_size = 1500;
