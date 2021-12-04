@@ -136,24 +136,25 @@ void process_tcp(const IPHeader *ip, const uint8_t *data, size_t size) {
         // https://www.rfc-editor.org/rfc/rfc793.html#page-65
         // "If the state is LISTEN then"
 
-        // first check for an RST
-        // An incoming RST should be ignored.  Return.
+        // "first check for an RST
+        // An incoming RST should be ignored.  Return."
         if (tcp_header->rst) {
           return;
         }
 
-        // second check for an ACK
+        // "second check for an ACK"
         if (tcp_header->ack) {
-          // Any acknowledgment is bad if it arrives on a connection still in
+          // "Any acknowledgment is bad if it arrives on a connection still in
           // the LISTEN state.  An acceptable reset segment should be formed
           // for any arriving ACK-bearing segment.  The RST should be
           // formatted as follows:
           // <SEQ=SEG.ACK><CTL=RST>
-          // Return.
+          // Return."
+          UNIMPLEMENTED()
           return;
         }
 
-        // third check for a SYN
+        // "third check for a SYN"
         if (tcp_header->syn) {
           int new_fd = tcp_socket();
           TCP *new_tcp = tcp_fds[new_fd];
@@ -165,9 +166,9 @@ void process_tcp(const IPHeader *ip, const uint8_t *data, size_t size) {
           new_tcp->local_port = tcp->local_port;
           new_tcp->remote_port = ntohs(tcp_header->source);
 
-          // Set RCV.NXT to SEG.SEQ+1, IRS is set to SEG.SEQ and any other
+          // "Set RCV.NXT to SEG.SEQ+1, IRS is set to SEG.SEQ and any other
           // control or text should be queued for processing later.  ISS
-          // should be selected and
+          // should be selected"
           new_tcp->rcv_nxt = seg_seq + 1;
           new_tcp->irs = seg_seq;
 
@@ -181,16 +182,12 @@ void process_tcp(const IPHeader *ip, const uint8_t *data, size_t size) {
           // TODO: send SYN,ACK to remote
           // 44 = 20(IP) + 24(TCP)
           // with 4 bytes option(MSS)
-          // a SYN segment sent of the form:
-          // <SEQ=ISS><ACK=RCV.NXT><CTL=SYN,ACK>
+          // "a SYN segment sent of the form:
+          // <SEQ=ISS><ACK=RCV.NXT><CTL=SYN,ACK>"
+          UNIMPLEMENTED()
 
-          // SND.NXT is set to ISS+1 and SND.UNA to ISS.  The connection
-          // state should be changed to SYN-RECEIVED.  Note that any other
-          // incoming control or data (combined with SYN) will be processed
-          // in the SYN-RECEIVED state, but processing of SYN and ACK should
-          // not be repeated.  If the listen was not fully specified (i.e.,
-          // the foreign socket was not fully specified), then the
-          // unspecified fields should be filled in now.
+          // "SND.NXT is set to ISS+1 and SND.UNA to ISS.  The connection
+          // state should be changed to SYN-RECEIVED."
           new_tcp->snd_nxt = initial_seq + 1;
           new_tcp->snd_una = initial_seq;
           new_tcp->snd_wnd = seg_wnd;
@@ -210,7 +207,7 @@ void process_tcp(const IPHeader *ip, const uint8_t *data, size_t size) {
           if (tcp_seq_le(seg_ack, tcp->iss) ||
               tcp_seq_gt(seg_ack, tcp->snd_nxt)) {
             // TODO: send a reset when !RST
-            printf("Send RST\n");
+            UNIMPLEMENTED()
             return;
           }
         }
@@ -230,8 +227,10 @@ void process_tcp(const IPHeader *ip, const uint8_t *data, size_t size) {
           if (tcp_seq_gt(tcp->snd_una, tcp->iss)) {
             // "our SYN has been ACKed"
             // send ACK segment
+            UNIMPLEMENTED()
           } else {
             // "Otherwise enter SYN-RECEIVED"
+            UNIMPLEMENTED()
           }
         }
 
@@ -254,33 +253,49 @@ void process_tcp(const IPHeader *ip, const uint8_t *data, size_t size) {
           tcp->state == TCPState::CLOSING || tcp->state == TCPState::LAST_ACK ||
           tcp->state == TCPState::TIME_WAIT) {
 
-        // first check sequence number
+        // "first check sequence number"
 
         // "There are four cases for the acceptability test for an incoming
         // segment:"
         bool acceptability = false;
-        // TODO
+        UNIMPLEMENTED()
 
         // "If an incoming segment is not acceptable, an acknowledgment
         // should be sent in reply (unless the RST bit is set, if so drop
         // the segment and return):"
-        // TODO
 
         // "second check the RST bit,"
-        // TODO
 
         // "fourth, check the SYN bit,"
 
         // "fifth check the ACK field,"
         if (tcp_header->ack) {
+          // SYN-RECEIVED STATE
+          if (tcp->state == SYN_RCVD) {
+            // If SND.UNA =< SEG.ACK =< SND.NXT then enter ESTABLISHED state
+            // and continue processing.
+            if (tcp_seq_le(tcp->snd_una, seg_ack) &&
+                tcp_seq_le(seg_ack, tcp->snd_nxt)) {
+              printf("TCP state transition to ESTABLISHED\n");
+              tcp->state = TCPState::ESTABLISHED;
+            }
+
+            // If the segment acknowledgment is not acceptable, form a
+            // reset segment,
+            //<SEQ=SEG.ACK><CTL=RST>
+            // and send it.
+          }
+
           if (tcp->state == ESTABLISHED) {
             // TODO(feature 5.1 send and receive window)
             // "If SND.UNA < SEG.ACK =< SND.NXT then, set SND.UNA <- SEG.ACK."
+            UNIMPLEMENTED()
 
             // "If SND.UNA < SEG.ACK =< SND.NXT, the send window should be
             // updated.  If (SND.WL1 < SEG.SEQ or (SND.WL1 = SEG.SEQ and
             // SND.WL2 =< SEG.ACK)), set SND.WND <- SEG.WND, set
             // SND.WL1 <- SEG.SEQ, and set SND.WL2 <- SEG.ACK."
+            UNIMPLEMENTED()
           }
         }
 
@@ -297,7 +312,7 @@ void process_tcp(const IPHeader *ip, const uint8_t *data, size_t size) {
 
             // "Send an acknowledgment of the form:
             // <SEQ=SND.NXT><ACK=RCV.NXT><CTL=ACK>"
-            // TODO
+            UNIMPLEMENTED()
           }
         }
 
@@ -316,7 +331,7 @@ void process_tcp(const IPHeader *ip, const uint8_t *data, size_t size) {
             tcp->rcv_nxt++;
 
             // send ACK segment
-            // TODO
+            UNIMPLEMENTED()
           }
         }
       }
@@ -575,7 +590,7 @@ ssize_t tcp_write(int fd, const uint8_t *data, size_t size) {
     // send data to remote
     size_t bytes_to_send = tcp->send.size;
     // consider mss and send sequence space
-    // TODO
+    UNIMPLEMENTED()
     size_t segment_len = 0;
     if (segment_len > 0) {
       printf("Sending segment of len %zu to remote\n", segment_len);
