@@ -3,3 +3,4 @@ test:
   script:
     # DO NOT EDIT!
     - make
+    - make test || true
