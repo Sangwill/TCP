@@ -1,0 +1,8 @@
+test:
+  image: debian:stable
+  script:
+    # DO NOT EDIT!
+    - sudo apt update
+    - sudo apt install -y python3-pip ninja-build gcc g++
+    - pip3 install meson
+    - PATH=~/.local/bin:$PATH make
