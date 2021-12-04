@@ -120,3 +120,10 @@ test_initial_seq = executable('test-initial-seq',
             'src/test/test_initial_seq.cpp',
             include_directories: incdir)
 test('test initial seq generation', test_initial_seq)
+
+test_seq_compare = executable('test-seq-compare',
+            lab_sources,
+            common_sources,
+            'src/test/test_seq_compare.cpp',
+            include_directories: incdir)
+test('test seq comparison', test_initial_seq)

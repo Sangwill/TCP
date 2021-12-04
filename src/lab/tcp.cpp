@@ -493,13 +493,25 @@ bool verify_tcp_checksum(const IPHeader *ip, const TCPHeader *tcp) {
 }
 
 // TODO(feature 2.1 sequence arithmetic)
-bool tcp_seq_lt(uint32_t a, uint32_t b) { return true; }
+bool tcp_seq_lt(uint32_t a, uint32_t b) {
+  UNIMPLEMENTED()
+  return true;
+}
 
-bool tcp_seq_le(uint32_t a, uint32_t b) { return true; }
+bool tcp_seq_le(uint32_t a, uint32_t b) {
+  UNIMPLEMENTED()
+  return true;
+}
 
-bool tcp_seq_gt(uint32_t a, uint32_t b) { return true; }
+bool tcp_seq_gt(uint32_t a, uint32_t b) {
+  UNIMPLEMENTED()
+  return true;
+}
 
-bool tcp_seq_ge(uint32_t a, uint32_t b) { return true; }
+bool tcp_seq_ge(uint32_t a, uint32_t b) {
+  UNIMPLEMENTED()
+  return true;
+}
 
 // returns fd
 int tcp_socket() {
