@@ -29,6 +29,18 @@ void update_tcp_ip_checksum(uint8_t *buffer) {
   update_ip_checksum(ip_hdr);
 }
 
+uint32_t generate_initial_seq() {
+  // initial sequence number based on timestamp
+  // rfc793 page 27 or rfc6528
+  // https://www.rfc-editor.org/rfc/rfc793.html#page-27
+  // "The generator is bound to a (possibly fictitious) 32
+  // bit clock whose low order bit is incremented roughly every 4
+  // microseconds."
+  // TODO(feature 2.2 initial sequence number selection)
+  UNIMPLEMENTED()
+  return 0;
+}
+
 void process_tcp(const IPHeader *ip, const uint8_t *data, size_t size) {
   TCPHeader *tcp_header = (TCPHeader *)data;
   if (!verify_tcp_checksum(ip, tcp_header)) {
@@ -120,7 +132,8 @@ void process_tcp(const IPHeader *ip, const uint8_t *data, size_t size) {
       }
 
       if (tcp->state == TCPState::LISTEN) {
-        // rfc793 page 66
+        // rfc793 page 65
+        // https://www.rfc-editor.org/rfc/rfc793.html#page-65
         // "If the state is LISTEN then"
 
         // first check for an RST
@@ -157,7 +170,8 @@ void process_tcp(const IPHeader *ip, const uint8_t *data, size_t size) {
           // should be selected and
           new_tcp->rcv_nxt = seg_seq + 1;
           new_tcp->irs = seg_seq;
-          uint32_t initial_seq = current_ts_usec() / 4;
+
+          uint32_t initial_seq = generate_initial_seq();
           new_tcp->iss = initial_seq;
 
           // initialize params
@@ -189,6 +203,7 @@ void process_tcp(const IPHeader *ip, const uint8_t *data, size_t size) {
 
       if (tcp->state == TCPState::SYN_SENT) {
         // rfc793 page 66
+        // https://www.rfc-editor.org/rfc/rfc793.html#page-66
         // "If the state is SYN-SENT then"
         // "If the ACK bit is set"
         if (tcp_header->ack) {
@@ -229,6 +244,7 @@ void process_tcp(const IPHeader *ip, const uint8_t *data, size_t size) {
       }
 
       // rfc793 page 69
+      // https://www.rfc-editor.org/rfc/rfc793.html#page-69
       // "Otherwise,"
       if (tcp->state == TCPState::SYN_RCVD ||
           tcp->state == TCPState::ESTABLISHED ||
@@ -311,6 +327,7 @@ void process_tcp(const IPHeader *ip, const uint8_t *data, size_t size) {
   printf("No matching TCP connection found\n");
   // send RST
   // rfc793 page 65 CLOSED state
+  // https://www.rfc-editor.org/rfc/rfc793.html#page-65
   if (tcp_header->rst) {
     // "An incoming segment containing a RST is discarded."
     return;
@@ -362,6 +379,9 @@ void update_tcp_checksum(const IPHeader *ip, TCPHeader *tcp) {
 
   // pseudo header
   // rfc793 page 17
+  // https://www.rfc-editor.org/rfc/rfc793.html#page-17
+  // "This pseudo header contains the Source
+  // Address, the Destination Address, the Protocol, and TCP length."
   uint8_t pseudo_header[12];
   memcpy(&pseudo_header[0], &ip->ip_src, 4);
   memcpy(&pseudo_header[4], &ip->ip_dst, 4);
@@ -411,6 +431,9 @@ bool verify_tcp_checksum(const IPHeader *ip, const TCPHeader *tcp) {
 
   // pseudo header
   // rfc793 page 17
+  // https://www.rfc-editor.org/rfc/rfc793.html#page-17
+  // "This pseudo header contains the Source
+  // Address, the Destination Address, the Protocol, and TCP length."
   uint8_t pseudo_header[12];
   memcpy(&pseudo_header[0], &ip->ip_src, 4);
   memcpy(&pseudo_header[4], &ip->ip_dst, 4);
@@ -490,10 +513,7 @@ void tcp_connect(int fd, uint32_t dst_addr, uint16_t dst_port) {
   // assume maximum mss for remote by default
   tcp->local_mss = tcp->remote_mss = DEFAULT_MSS;
 
-  // initial sequence number based on timestamp
-  // rfc793 page 27 or rfc6528
-  // TODO(feature 2.2 initial sequence number selection)
-  uint32_t initial_seq = 0;
+  uint32_t initial_seq = generate_initial_seq();
   // rfc793 page 54 OPEN Call CLOSED STATE
   tcp->iss = initial_seq;
   // only one unacknowledged number: initial_seq
