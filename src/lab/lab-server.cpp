@@ -7,6 +7,7 @@
 #include <sys/types.h>
 #include <sys/un.h>
 #include <unistd.h>
+#include <assert.h>
 
 #include "common.h"
 #include "ip.h"
