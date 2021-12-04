@@ -120,4 +120,6 @@ template <size_t N> struct RingBuffer {
   size_t free_bytes() const { return N - size; }
 };
 
+void parse_argv(int argc, char *argv[]);
+
 #endif

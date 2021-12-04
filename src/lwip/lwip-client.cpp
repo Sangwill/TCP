@@ -39,60 +39,7 @@ void httpc_result(void *arg, httpc_result_t httpc_result, u32_t rx_content_len,
 }
 
 int main(int argc, char *argv[]) {
-  int c;
-  char *local = NULL;
-  char *remote = NULL;
-  char *pcap = NULL;
-  int hflag = 0;
-
-  // parse arguments
-  while ((c = getopt(argc, argv, "hl:r:p:")) != -1) {
-    switch (c) {
-    case 'h':
-      hflag = 1;
-      break;
-    case 'l':
-      local = optarg;
-      break;
-    case 'r':
-      remote = optarg;
-      break;
-    case 'p':
-      pcap = optarg;
-      break;
-    case '?':
-      fprintf(stderr, "Unknown option: %c\n", optopt);
-      return 1;
-    default:
-      break;
-    }
-  }
-
-  if (hflag) {
-    fprintf(stderr, "Usage: %s [-h] [-l LOCAL] [-r REMOTE]\n", argv[0]);
-    fprintf(stderr, "\t-l LOCAL: local unix socket path\n");
-    fprintf(stderr, "\t-r REMOTE: remote unix socket path\n");
-    fprintf(stderr, "\t-p PCAP: pcap file for debugging\n");
-    return 0;
-  }
-  if (!local) {
-    fprintf(stderr, "Please specify LOCAL addr(-l)!\n");
-    return 1;
-  }
-  if (!remote) {
-    fprintf(stderr, "Please specify REMOTE addr(-r)!\n");
-    return 1;
-  }
-  printf("Using local addr: %s\n", local);
-  printf("Using remote addr: %s\n", remote);
-
-  remote_addr = create_sockaddr_un(remote);
-
-  socket_fd = setup_unix_socket(local);
-
-  if (pcap) {
-    pcap_fp = pcap_create(pcap);
-  }
+  parse_argv(argc, argv);
 
   // init lwip
   struct netif netif;
