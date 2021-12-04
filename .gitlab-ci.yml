@@ -2,7 +2,4 @@ test:
   image: jiegec/tcp-lab-x86_64
   script:
     # DO NOT EDIT!
-    - apt update
-    - apt install -y python3-pip ninja-build gcc g++
-    - pip3 install meson
-    - PATH=~/.local/bin:$PATH make
+    - make
