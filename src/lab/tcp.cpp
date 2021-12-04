@@ -49,10 +49,40 @@ void process_tcp(const IPHeader *ip, const uint8_t *data, size_t size) {
   uint32_t seg_len = ntohs(ip->ip_len) - ip->ip_hl * 4 - tcp_header->doff * 4;
   const uint8_t *payload = data + tcp_header->doff * 4;
 
-  for (auto &tcp : tcp_connections) {
-    if (tcp->local_ip == ip->ip_dst && tcp->remote_ip == ip->ip_src &&
-        tcp->local_port == ntohs(tcp_header->dest) &&
-        tcp->remote_port == ntohs(tcp_header->source)) {
+  // iterate tcp connections in two pass
+  // first pass: only exact matches
+  // second pass: allow wildcard matches for listening socket
+  // this gives priority to connected sockets
+  for (int pass = 1; pass <= 2; pass++) {
+    for (auto &tcp : tcp_connections) {
+      if (tcp->state == TCPState::CLOSED) {
+        // ignore closed sockets
+        continue;
+      }
+
+      if (pass == 1) {
+        // first pass: exact match
+        if (tcp->local_ip != ip->ip_dst || tcp->remote_ip != ip->ip_src ||
+            tcp->local_port != ntohs(tcp_header->dest) ||
+            tcp->remote_port != ntohs(tcp_header->source)) {
+          continue;
+        }
+      } else {
+        // second pass: allow wildcard
+        if (tcp->local_ip != 0 && tcp->local_ip != ip->ip_dst) {
+          continue;
+        }
+        if (tcp->remote_ip != 0 && tcp->remote_ip != ip->ip_src) {
+          continue;
+        }
+        if (tcp->local_port != 0 && tcp->local_port != ntohs(tcp_header->dest)) {
+          continue;
+        }
+        if (tcp->remote_port != 0 && tcp->remote_port != ntohs(tcp_header->source)) {
+          continue;
+        }
+      }
+
       // matched
       if (tcp_header->doff > 20 / 4) {
         // options exists
@@ -173,8 +203,8 @@ void process_tcp(const IPHeader *ip, const uint8_t *data, size_t size) {
         // "seventh, process the segment text,"
         if (seg_len > 0) {
           if (tcp->state == ESTABLISHED) {
-            // "Once in the ESTABLISHED state, it is possible to deliver segment
-            // text to user RECEIVE buffers."
+            // "Once in the ESTABLISHED state, it is possible to deliver
+            // segment text to user RECEIVE buffers."
             printf("Received %d bytes from server\n", seg_len);
 
             // TODO(feature 4.2 simple client RECEIVE from server)
@@ -368,8 +398,12 @@ bool tcp_seq_ge(uint32_t a, uint32_t b) { return true; }
 int tcp_socket() {
   for (int i = 0;; i++) {
     if (tcp_fds.find(i) == tcp_fds.end()) {
-      // not found, create
-      tcp_fds[i] = new TCP;
+      // found free fd, create one
+      TCP *tcp = new TCP;
+      tcp_fds[i] = tcp;
+
+      // add necessary initialization here
+      tcp->state = TCPState::CLOSED;
       return i;
     }
   }
@@ -503,8 +537,20 @@ void tcp_shutdown(int fd, bool readHalf, bool writeHalf) {
 
 void tcp_close(int fd) {}
 
-void tcp_bind(int fd, uint16_t port) {}
+void tcp_bind(int fd, be32_t addr, uint16_t port) {
+  TCP *tcp = tcp_fds[fd];
+  tcp->local_ip = addr;
+  tcp->local_port = port;
+  // wildcard
+  tcp->remote_ip = 0;
+  tcp->remote_port = 0;
+}
 
-void tcp_listen(int fd) {}
+void tcp_listen(int fd) {
+  TCP *tcp = tcp_fds[fd];
+
+  // enter listen state
+  tcp->state = TCPState::LISTEN;
+}
 
 int tcp_accept(int fd) { return -1; }

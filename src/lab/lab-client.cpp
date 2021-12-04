@@ -16,10 +16,12 @@
 int main(int argc, char *argv[]) {
   parse_argv(argc, argv);
 
+  // create socket and connect to server port 80
   int tcp_fd = tcp_socket();
   tcp_connect(tcp_fd, server_ip, 80);
 
-  // always try to read
+  // always try to read from tcp
+  // and write to stdout
   std::function<void()> read_fn = [&] {
     char buffer[1024];
     ssize_t res = tcp_read(tcp_fd, (uint8_t *)buffer, sizeof(buffer) - 1);
@@ -34,7 +36,7 @@ int main(int argc, char *argv[]) {
   };
   TIMERS.schedule_job(read_fn, 1000);
 
-  // write something every 1s
+  // write HTTP request line by line every 1s
   const char *data[] = {
       "GET /index.html HTTP/1.1\r\n",
       "Accept: */*\r\n",
@@ -43,7 +45,7 @@ int main(int argc, char *argv[]) {
       "\r\n",
   };
   int index = 0;
-  int offset = 0;
+  size_t offset = 0;
   std::function<void()> write_fn = [&] {
     const char *p = data[index];
     size_t len = strlen(p);
@@ -67,7 +69,7 @@ int main(int argc, char *argv[]) {
   TIMERS.schedule_job(write_fn, 1000);
 
   // main loop
-  const size_t buffer_size = 1500;
+  const size_t buffer_size = 1500; // MTU
   uint8_t buffer[buffer_size];
   while (1) {
     ssize_t size = recv_packet(buffer, buffer_size);

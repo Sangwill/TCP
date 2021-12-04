@@ -68,6 +68,8 @@ const size_t SEND_BUFF_SIZE = 4096;
 // Transmission Control Block
 // rfc793 Page 10 Section 3.2
 struct TCP {
+  // (local_ip, remote_ip, local_port, remote_port) tuple
+  // 0 means wildcard
   be32_t local_ip;
   be32_t remote_ip;
   uint16_t local_port;
@@ -130,7 +132,7 @@ bool tcp_seq_ge(uint32_t a, uint32_t b);
 int tcp_socket();
 
 // TCP connect (OPEN call)
-void tcp_connect(int fd, uint32_t dst_addr, uint16_t dst_port);
+void tcp_connect(int fd, be32_t dst_addr, uint16_t dst_port);
 
 // write data to TCP (SEND call)
 // returns the bytes written
@@ -148,7 +150,7 @@ void tcp_shutdown(int fd, bool readHalf, bool writeHalf);
 void tcp_close(int fd);
 
 // bind socket to TCP port
-void tcp_bind(int fd, uint16_t port);
+void tcp_bind(int fd, be32_t addr, uint16_t port);
 
 // enter listen state
 void tcp_listen(int fd);

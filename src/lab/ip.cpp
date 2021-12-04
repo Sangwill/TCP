@@ -20,7 +20,7 @@ void process_ip(const uint8_t *data, size_t size) {
   }
 
   if (ip->ip_off & 0x20) {
-    printf("Got fragmented IP, no supported\n");
+    printf("Got fragmented IP, not supported\n");
     return;
   }
 
