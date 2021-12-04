@@ -126,4 +126,4 @@ test_seq_compare = executable('test-seq-compare',
             common_sources,
             'src/test/test_seq_compare.cpp',
             include_directories: incdir)
-test('test seq comparison', test_initial_seq)
+test('test seq comparison', test_seq_compare)
