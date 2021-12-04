@@ -58,13 +58,13 @@ lwip_lib = static_library('lwip',
                           cpp_args : '-fno-common',
                           include_directories: lwip_incdir)
 
-client = executable('client',
-           'src/client/client.cpp',
+lwip_client = executable('lwip-client',
+           'src/lwip/lwip-client.cpp',
            link_with: lwip_lib,
            include_directories: lwip_incdir)
 
-server = executable('server',
-           'src/server/server.cpp',
+lwip_server = executable('lwip-server',
+           'src/lwip/lwip-server.cpp',
            link_with: lwip_lib,
            include_directories: lwip_incdir)
 
@@ -87,14 +87,14 @@ lab_server = executable('lab-server',
            'src/lab/lab-server.cpp',
            include_directories: incdir)
 
-run_target('run-server',
-  depends: [server],
-  command : [server, '-l', 's', '-r', 'c', '-p', 'server.pcap']
+run_target('run-lwip-server',
+  depends: [lwip_server],
+  command : [lwip_server, '-l', 's', '-r', 'c', '-p', 'server.pcap']
 )
 
-run_target('run-client',
-  depends: [client],
-  command : [client, '-l', 'c', '-r', 's', '-p', 'client.pcap']
+run_target('run-lwip-client',
+  depends: [lwip_client],
+  command : [lwip_client, '-l', 'c', '-r', 's', '-p', 'client.pcap']
 )
 
 run_target('run-lab-client',

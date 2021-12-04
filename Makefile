@@ -19,11 +19,14 @@ compile: builddir
 clean: builddir
 	ninja -C builddir clean
 
-run-server: builddir
-	ninja -C builddir run-server
+run-lwip-server: builddir
+	ninja -C builddir run-lwip-server
 
-run-client: builddir
-	ninja -C builddir run-client
+run-lwip-client: builddir
+	ninja -C builddir run-lwip-client
 
-run-lab: builddir
-	ninja -C builddir run-lab
+run-lab-client: builddir
+	ninja -C builddir run-lab-client
+
+run-lab-server: builddir
+	ninja -C builddir run-lab-server
