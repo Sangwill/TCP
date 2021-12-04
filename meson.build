@@ -57,35 +57,41 @@ lwip_lib = static_library('lwip',
                           c_args : '-fno-common',
                           cpp_args : '-fno-common',
                           include_directories: lwip_incdir)
+lab_sources = [
+        'src/lab/ip.cpp',
+        'src/lab/tcp.cpp',
+]
+
+common_sources = [
+        'src/lab/timers.cpp',
+        'src/common.cpp',
+]
 
 lwip_client = executable('lwip-client',
+           common_sources,
            'src/lwip/lwip-client.cpp',
            link_with: lwip_lib,
            include_directories: lwip_incdir)
 
 lwip_server = executable('lwip-server',
+           common_sources,
            'src/lwip/lwip-server.cpp',
            link_with: lwip_lib,
            include_directories: lwip_incdir)
 
 incdir = include_directories('include')
 
-lab_sources = [
-        'src/lab/timers.cpp',
-        'src/lab/ip.cpp',
-        'src/lab/tcp.cpp',
-        'src/common.cpp',
-]
-
 lab_client = executable('lab-client',
             lab_sources,
-           'src/lab/lab-client.cpp',
-           include_directories: incdir)
+            common_sources,
+            'src/lab/lab-client.cpp',
+            include_directories: incdir)
 
 lab_server = executable('lab-server',
             lab_sources,
-           'src/lab/lab-server.cpp',
-           include_directories: incdir)
+            common_sources,
+            'src/lab/lab-server.cpp',
+            include_directories: incdir)
 
 run_target('run-lwip-server',
   depends: [lwip_server],

@@ -147,5 +147,14 @@ void tcp_shutdown(int fd, bool readHalf, bool writeHalf);
 // closes and free fd
 void tcp_close(int fd);
 
+// bind socket to TCP port
+void tcp_bind(int fd, uint16_t port);
+
+// enter listen state
+void tcp_listen(int fd);
+
+// accept TCP connection if exists
+// return new fd if a client is connecting, otherwise -1
+int tcp_accept(int fd);
 
 #endif

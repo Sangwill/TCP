@@ -7,6 +7,7 @@
 #include <unistd.h>
 
 #include "common.h"
+#include "timers.h"
 
 // global state
 struct sockaddr_un remote_addr;
@@ -195,4 +196,7 @@ void parse_argv(int argc, char *argv[]) {
   if (pcap) {
     pcap_fp = pcap_create(pcap);
   }
+
+  // init random
+  srand(current_ts_msec());
 }

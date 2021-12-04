@@ -502,3 +502,9 @@ void tcp_shutdown(int fd, bool readHalf, bool writeHalf) {
 }
 
 void tcp_close(int fd) {}
+
+void tcp_bind(int fd, uint16_t port) {}
+
+void tcp_listen(int fd) {}
+
+int tcp_accept(int fd) { return -1; }

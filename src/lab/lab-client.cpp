@@ -16,8 +16,6 @@
 int main(int argc, char *argv[]) {
   parse_argv(argc, argv);
 
-  srand(current_ts_msec());
-
   int tcp_fd = tcp_socket();
   tcp_connect(tcp_fd, server_ip, 80);
 
@@ -55,7 +53,7 @@ int main(int argc, char *argv[]) {
       offset += res;
 
       // write completed
-      if (res == len) {
+      if (offset == len) {
         index++;
         offset = 0;
       }
@@ -68,6 +66,7 @@ int main(int argc, char *argv[]) {
   };
   TIMERS.schedule_job(write_fn, 1000);
 
+  // main loop
   const size_t buffer_size = 1500;
   uint8_t buffer[buffer_size];
   while (1) {
