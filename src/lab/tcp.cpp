@@ -5,9 +5,6 @@
 #include <map>
 #include <stdio.h>
 
-// a list of TCP connections
-std::vector<TCP *> tcp_connections;
-
 // mapping from fd to TCP connection
 std::map<int, TCP *> tcp_fds;
 
@@ -54,7 +51,8 @@ void process_tcp(const IPHeader *ip, const uint8_t *data, size_t size) {
   // second pass: allow wildcard matches for listening socket
   // this gives priority to connected sockets
   for (int pass = 1; pass <= 2; pass++) {
-    for (auto &tcp : tcp_connections) {
+    for (auto &pair : tcp_fds) {
+      TCP *tcp = pair.second;
       if (tcp->state == TCPState::CLOSED) {
         // ignore closed sockets
         continue;
@@ -463,8 +461,6 @@ void tcp_connect(int fd, uint32_t dst_addr, uint16_t dst_port) {
   send_packet(buffer, sizeof(buffer));
 
   tcp->state = TCPState::SYN_SENT;
-
-  tcp_connections.push_back(tcp);
   return;
 }
 
