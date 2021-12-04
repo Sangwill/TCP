@@ -49,6 +49,7 @@ struct TCPHeader {
 };
 
 // RFC793 Page 21
+// https://www.rfc-editor.org/rfc/rfc793.html#page-21
 enum TCPState {
   LISTEN,
   SYN_SENT,
@@ -111,9 +112,19 @@ struct TCP {
 
   // pending accept queue
   std::deque<int> accept_queue;
+
+  TCP() {
+    state = TCPState::CLOSED;
+  }
+
+  // state transition with debug output
+  void set_state(TCPState new_state);
 };
 
 extern std::vector<TCP *> tcp_connections;
+
+// convert tcp state to string
+const char *tcp_state_to_string(TCPState state);
 
 // generate initial seq
 uint32_t generate_initial_seq();

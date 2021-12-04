@@ -9,6 +9,42 @@
 std::map<int, TCP *> tcp_fds;
 
 // some helper functions
+const char *tcp_state_to_string(TCPState state) {
+  switch (state) {
+  case TCPState::LISTEN:
+    return "LISTEN";
+  case TCPState::SYN_SENT:
+    return "SYN_SENT";
+  case TCPState::SYN_RCVD:
+    return "SYN_RCVD";
+  case TCPState::ESTABLISHED:
+    return "ESTABLISHED";
+  case TCPState::FIN_WAIT_1:
+    return "FIN_WAIT_1";
+  case TCPState::FIN_WAIT_2:
+    return "FIN_WAIT_2";
+  case TCPState::CLOSE_WAIT:
+    return "CLOSE_WAIT";
+  case TCPState::CLOSING:
+    return "CLOSING";
+  case TCPState::LAST_ACK:
+    return "LAST_ACK";
+  case TCPState::TIME_WAIT:
+    return "TIME_WAIT";
+  case TCPState::CLOSED:
+    return "CLOSED";
+  default:
+    printf("Invalid TCPState\n");
+    exit(1);
+  }
+}
+
+void TCP::set_state(TCPState new_state) {
+  printf("TCP state transitioned from %s to %s\n", tcp_state_to_string(state),
+         tcp_state_to_string(new_state));
+  state = new_state;
+}
+
 void construct_ip_header(uint8_t *buffer, const TCP *tcp,
                          uint16_t total_length) {
   IPHeader *ip_hdr = (IPHeader *)buffer;
@@ -215,7 +251,7 @@ void process_tcp(const IPHeader *ip, const uint8_t *data, size_t size) {
         // "second check the RST bit"
         if (tcp_header->rst) {
           printf("Connection reset.\n");
-          tcp->state = TCPState::CLOSED;
+          tcp->set_state(TCPState::CLOSED);
           return;
         }
 
@@ -276,8 +312,7 @@ void process_tcp(const IPHeader *ip, const uint8_t *data, size_t size) {
             // and continue processing.
             if (tcp_seq_le(tcp->snd_una, seg_ack) &&
                 tcp_seq_le(seg_ack, tcp->snd_nxt)) {
-              printf("TCP state transition to ESTABLISHED\n");
-              tcp->state = TCPState::ESTABLISHED;
+              tcp->set_state(TCPState::ESTABLISHED);
             }
 
             // If the segment acknowledgment is not acceptable, form a
@@ -522,7 +557,6 @@ int tcp_socket() {
       tcp_fds[i] = tcp;
 
       // add necessary initialization here
-      tcp->state = TCPState::CLOSED;
       return i;
     }
   }
@@ -553,7 +587,7 @@ void tcp_connect(int fd, uint32_t dst_addr, uint16_t dst_port) {
   tcp->snd_wnd = 0;
   tcp->rcv_wnd = tcp->recv.free_bytes();
   tcp->snd_wl2 = initial_seq - 1;
-  tcp->state = TCPState::SYN_SENT;
+  tcp->set_state(TCPState::SYN_SENT);
 
   // send SYN to remote
   // 44 = 20(IP) + 24(TCP)
@@ -674,7 +708,7 @@ void tcp_listen(int fd) {
   assert(tcp);
 
   // enter listen state
-  tcp->state = TCPState::LISTEN;
+  tcp->set_state(TCPState::LISTEN);
 }
 
 int tcp_accept(int fd) {
