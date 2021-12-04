@@ -90,6 +90,7 @@ struct TCP {
 
   // TODO(feature 2.3 send/receive sequence variables)
   // see rfc793 page 20 fig 4 send sequence space
+  // https://www.rfc-editor.org/rfc/rfc793.html#page-20
   // acknowledged: seq < snd_una
   // sent but not acknowledged: snd_una <= seq < snd_nxt
   // allowed for new data transmission: snd_nxt <= seq < snd_una+snd_wnd
@@ -101,6 +102,7 @@ struct TCP {
   uint32_t iss;     // initial send sequence number
 
   // see rfc793 page 20 fig 5 recv sequence space
+  // https://www.rfc-editor.org/rfc/rfc793.html#page-20
   uint32_t rcv_nxt;
   // when out of order is unsupported,
   // rcv_wnd always equals to this->recv.free_bytes()
@@ -124,6 +126,7 @@ bool verify_tcp_checksum(const IPHeader *ip, const TCPHeader *tcp);
 
 // tcp sequence number comparisons
 // rfc793 page 24
+// https://www.rfc-editor.org/rfc/rfc793.html#page-24
 // "The symbol "=<" means "less than or equal (modulo 2**32)."
 bool tcp_seq_lt(uint32_t a, uint32_t b);
 bool tcp_seq_le(uint32_t a, uint32_t b);

@@ -515,13 +515,17 @@ void tcp_connect(int fd, uint32_t dst_addr, uint16_t dst_port) {
 
   uint32_t initial_seq = generate_initial_seq();
   // rfc793 page 54 OPEN Call CLOSED STATE
+  // https://www.rfc-editor.org/rfc/rfc793.html#page-54
   tcp->iss = initial_seq;
   // only one unacknowledged number: initial_seq
+  // "Set SND.UNA to ISS, SND.NXT to ISS+1, enter SYN-SENT
+  // state, and return."
   tcp->snd_una = initial_seq;
   tcp->snd_nxt = initial_seq + 1;
   tcp->snd_wnd = 0;
   tcp->rcv_wnd = tcp->recv.free_bytes();
   tcp->snd_wl2 = initial_seq - 1;
+  tcp->state = TCPState::SYN_SENT;
 
   // send SYN to remote
   // 44 = 20(IP) + 24(TCP)
@@ -542,6 +546,7 @@ void tcp_connect(int fd, uint32_t dst_addr, uint16_t dst_port) {
   // windows size: size of empty bytes in recv buffer
   tcp_hdr->window = 0;
   // mss option, rfc793 page 18
+  // https://www.rfc-editor.org/rfc/rfc793.html#page-18
   buffer[40] = 0x02; // kind
   buffer[41] = 0x04; // length
   buffer[42] = tcp->local_mss >> 8;
@@ -549,8 +554,6 @@ void tcp_connect(int fd, uint32_t dst_addr, uint16_t dst_port) {
 
   update_tcp_ip_checksum(buffer);
   send_packet(buffer, sizeof(buffer));
-
-  tcp->state = TCPState::SYN_SENT;
   return;
 }
 
@@ -560,6 +563,7 @@ ssize_t tcp_write(int fd, const uint8_t *data, size_t size) {
   assert(tcp);
 
   // rfc793 page 56 SEND Call
+  // https://www.rfc-editor.org/rfc/rfc793.html#page-56
   if (tcp->state == TCPState::SYN_SENT || tcp->state == TCPState::SYN_RCVD) {
     // queue data for transmission
     return tcp->send.write(data, size);
