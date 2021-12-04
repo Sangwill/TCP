@@ -33,7 +33,10 @@ void Timers::trigger() {
     if (timer.ts_msec > cur_ts) {
       break;
     }
-    timer.fn();
+    int res = timer.fn();
+    if (res >= 0) {
+      schedule_job(timer.fn, res);
+    }
     timers.pop();
   }
 }

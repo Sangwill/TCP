@@ -554,7 +554,7 @@ ssize_t tcp_write(int fd, const uint8_t *data, size_t size) {
     // TODO
     size_t segment_len = 0;
     if (segment_len > 0) {
-      printf("Sending segment of len %d to remote\n", segment_len);
+      printf("Sending segment of len %zu to remote\n", segment_len);
       // send data now
 
       // 20 IP header & 20 TCP header
