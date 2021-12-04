@@ -40,8 +40,10 @@ const char *tcp_state_to_string(TCPState state) {
 }
 
 void TCP::set_state(TCPState new_state) {
+  // for unit tests
   printf("TCP state transitioned from %s to %s\n", tcp_state_to_string(state),
          tcp_state_to_string(new_state));
+  fflush(stdout);
   state = new_state;
 }
 

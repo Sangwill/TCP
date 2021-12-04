@@ -127,3 +127,9 @@ test_seq_compare = executable('test-seq-compare',
             'src/test/test_seq_compare.cpp',
             include_directories: incdir)
 test('test seq comparison', test_seq_compare)
+
+root = meson.source_root()
+test('test 3-way handshake (client)',
+    import('python').find_installation('python3'),
+    args: [root / 'src/test/test_3way_handshake_client.py'],
+    is_parallel : false)
