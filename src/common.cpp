@@ -368,7 +368,7 @@ int open_device(std::string tun_name) {
 
 #endif
 
-  printf("Device %s is now up.\n", tun_name.c_str());
+  printf("Device %s is now up\n", tun_name.c_str());
   io_config = IOConfig::TUN;
   set_socket_blocking(fd, false);
   tun_fd = fd;

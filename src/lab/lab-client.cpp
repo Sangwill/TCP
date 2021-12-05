@@ -69,7 +69,7 @@ int main(int argc, char *argv[]) {
 
     // next data
     if (index < 5) {
-      return 1000;
+      return 100;
     } else {
       return -1;
     }

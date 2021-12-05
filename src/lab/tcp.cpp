@@ -159,7 +159,7 @@ void process_tcp(const IPHeader *ip, const uint8_t *data, size_t size) {
               tcp->remote_mss = mss;
               printf("Remote MSS is %d\n", mss);
             } else {
-              printf("Remote sent MSS option header in !SYN packet.\n");
+              printf("Remote sent MSS option header in !SYN packet\n");
             }
             opt_ptr += len;
           } else {
@@ -252,7 +252,7 @@ void process_tcp(const IPHeader *ip, const uint8_t *data, size_t size) {
 
         // "second check the RST bit"
         if (tcp_header->rst) {
-          printf("Connection reset.\n");
+          printf("Connection reset\n");
           tcp->set_state(TCPState::CLOSED);
           return;
         }
