@@ -327,12 +327,14 @@ int open_device(std::string tun_name) {
   }
 
   std::string command = "ifconfig '" + tun_name + "' up";
+  printf("Runnning: %s\n", command.c_str());
   system(command.c_str());
 
   // from macOS's perspective
   // local/remote is reversed
   command = std::string("ifconfig ") + "'" + tun_name + "' " + remote_ip + " " +
             local_ip;
+  printf("Running: %s\n", command.c_str());
   system(command.c_str());
 #else
 
@@ -353,12 +355,14 @@ int open_device(std::string tun_name) {
     tun_name = ifr.ifr_name;
 
     std::string command = "ip link set dev '" + tun_name + "' up";
+    printf("Runnning: %s\n", command.c_str());
     system(command.c_str());
 
     // from linux's perspective
     // local/remote is reversed
     command = std::string("ip addr add ") + remote_ip + " peer " + local_ip +
               " dev '" + tun_name + "'";
+    printf("Runnning: %s\n", command.c_str());
     system(command.c_str());
   }
 
