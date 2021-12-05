@@ -1,7 +1,6 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <net/if.h>
 #include <string>
 #include <sys/ioctl.h>
 #include <sys/socket.h>
@@ -11,6 +10,7 @@
 
 #ifdef __APPLE__
 
+#include <net/if.h>
 #include <net/if_utun.h>
 #include <sys/kern_control.h>
 #include <sys/kern_event.h>
