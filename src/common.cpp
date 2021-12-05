@@ -370,6 +370,7 @@ int open_device(std::string tun_name) {
 
   printf("Device %s is now up.\n", tun_name.c_str());
   io_config = IOConfig::TUN;
+  set_socket_blocking(fd, false);
   tun_fd = fd;
   return fd;
 }
