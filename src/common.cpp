@@ -276,8 +276,8 @@ int open_device(std::string tun_name) {
     // utun
     fd = socket(PF_SYSTEM, SOCK_DGRAM, SYSPROTO_CONTROL);
     if (fd < 0) {
-      perror("socket");
-      return -1;
+      perror("failed to create socket");
+      exit(1);
     }
 
     struct ctl_info info;
@@ -285,9 +285,9 @@ int open_device(std::string tun_name) {
     strncpy(info.ctl_name, UTUN_CONTROL_NAME, strlen(UTUN_CONTROL_NAME));
 
     if (ioctl(fd, CTLIOCGINFO, &info) < 0) {
-      perror("ioctl");
+      perror("failed to ioctl on tun device");
       close(fd);
-      return -1;
+      exit(1);
     }
 
     struct sockaddr_ctl ctl;
@@ -304,9 +304,9 @@ int open_device(std::string tun_name) {
     }
 
     if (connect(fd, (struct sockaddr *)&ctl, sizeof(ctl)) < 0) {
-      perror("connect");
+      perror("failed to connect to tun");
       close(fd);
-      return -1;
+      exit(1);
     }
 
     char ifname[IFNAMSIZ];
@@ -314,16 +314,16 @@ int open_device(std::string tun_name) {
 
     if (getsockopt(fd, SYSPROTO_CONTROL, UTUN_OPT_IFNAME, ifname, &ifname_len) <
         0) {
-      perror("getsockopt");
+      perror("failed to getsockopt for tun");
       close(fd);
-      return -1;
+      exit(1);
     }
     tun_name = ifname;
     // utun has a 32-bit loopback header ahead of data
     tun_padding_len = sizeof(uint32_t);
   } else {
     fprintf(stderr, "Bad tunnel name %s\n", tun_name.c_str());
-    return -1;
+    exit(1);
   }
 
   std::string command = "ifconfig '" + tun_name + "' up";
