@@ -1,18 +1,46 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <net/if.h>
+#include <string>
+#include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <time.h>
 #include <unistd.h>
 
+#ifdef __APPLE__
+
+#include <net/if_utun.h>
+#include <sys/kern_control.h>
+#include <sys/kern_event.h>
+#include <sys/sys_domain.h>
+
+#else
+
+#include <linux/if.h>
+#include <linux/if_tun.h>
+
+#endif
+
 #include "common.h"
+#include "ip.h"
 #include "timers.h"
 
 // global state
 struct sockaddr_un remote_addr;
+enum IOConfig {
+  UnixSocket,
+  TUN,
+} io_config;
 int socket_fd = 0;
+int tun_fd = 0;
 FILE *pcap_fp = nullptr;
+int tun_padding_len = 0;
+const uint32_t tun_padding_v4 = htonl(AF_INET);
+const uint32_t tun_padding_v6 = htonl(AF_INET6);
+const char *local_ip = "";
+const char *remote_ip = "";
 
 // random packet drop
 // never drop by default
@@ -107,16 +135,45 @@ void send_packet(const uint8_t *data, size_t size) {
   }
 
   // send to remote
-  sendto(socket_fd, data, size, 0, (struct sockaddr *)&remote_addr,
-         sizeof(remote_addr));
+  if (io_config == UnixSocket) {
+    sendto(socket_fd, data, size, 0, (struct sockaddr *)&remote_addr,
+           sizeof(remote_addr));
+  } else {
+    // prepend padding if needed
+    const uint8_t *ptr = data;
+    uint8_t buffer[4096];
+    if (tun_padding_len > 0) {
+      memcpy(buffer + tun_padding_len, data, size);
+      memcpy(buffer, &tun_padding_v4, tun_padding_len);
+      ptr = buffer;
+      size += tun_padding_len;
+    }
+
+    write(tun_fd, ptr, size);
+  }
 }
 
 ssize_t recv_packet(uint8_t *buffer, size_t buffer_size) {
-  struct sockaddr_un addr = {};
-  memset(&addr, 0, sizeof(addr));
-  socklen_t len = sizeof(addr);
-  ssize_t size = recvfrom(socket_fd, buffer, buffer_size, 0,
-                          (struct sockaddr *)&addr, &len);
+  ssize_t size = 0;
+  if (io_config == IOConfig::UnixSocket) {
+    struct sockaddr_un addr = {};
+    memset(&addr, 0, sizeof(addr));
+    socklen_t len = sizeof(addr);
+    size = recvfrom(socket_fd, buffer, buffer_size, 0, (struct sockaddr *)&addr,
+                    &len);
+  } else {
+    size = read(tun_fd, buffer, buffer_size);
+
+    // remove padding if needed
+    if (tun_padding_len > 0) {
+      if (size < tun_padding_len) {
+        return -1;
+      }
+      size -= tun_padding_len;
+      memmove(buffer, buffer + tun_padding_len, size);
+    }
+  }
+
   if (size >= 0) {
     // print
     printf("RX:");
@@ -144,9 +201,10 @@ void parse_argv(int argc, char *argv[]) {
   char *local = NULL;
   char *remote = NULL;
   char *pcap = NULL;
+  char *tun = NULL;
 
   // parse arguments
-  while ((c = getopt(argc, argv, "hl:r:p:")) != -1) {
+  while ((c = getopt(argc, argv, "hl:r:t:p:")) != -1) {
     switch (c) {
     case 'h':
       hflag = 1;
@@ -156,6 +214,9 @@ void parse_argv(int argc, char *argv[]) {
       break;
     case 'r':
       remote = optarg;
+      break;
+    case 't':
+      tun = optarg;
       break;
     case 'p':
       pcap = optarg;
@@ -173,25 +234,31 @@ void parse_argv(int argc, char *argv[]) {
     fprintf(stderr, "Usage: %s [-h] [-l LOCAL] [-r REMOTE]\n", argv[0]);
     fprintf(stderr, "\t-l LOCAL: local unix socket path\n");
     fprintf(stderr, "\t-r REMOTE: remote unix socket path\n");
+    fprintf(stderr, "\t-t TUN: use tun interface\n");
     fprintf(stderr, "\t-p PCAP: pcap file for debugging\n");
     exit(0);
   }
 
-  if (!local) {
-    fprintf(stderr, "Please specify LOCAL addr(-l)!\n");
-    exit(1);
+  if (tun) {
+    printf("Using TUN interface: %s\n", tun);
+    open_device(tun);
+  } else {
+    if (!local) {
+      fprintf(stderr, "Please specify LOCAL addr(-l)!\n");
+      exit(1);
+    }
+    if (!remote) {
+      fprintf(stderr, "Please specify REMOTE addr(-r)!\n");
+      exit(1);
+    }
+
+    printf("Using local addr: %s\n", local);
+    printf("Using remote addr: %s\n", remote);
+    remote_addr = create_sockaddr_un(remote);
+
+    socket_fd = setup_unix_socket(local);
+    io_config = IOConfig::UnixSocket;
   }
-  if (!remote) {
-    fprintf(stderr, "Please specify REMOTE addr(-r)!\n");
-    exit(1);
-  }
-
-  printf("Using local addr: %s\n", local);
-  printf("Using remote addr: %s\n", remote);
-
-  remote_addr = create_sockaddr_un(remote);
-
-  socket_fd = setup_unix_socket(local);
 
   if (pcap) {
     pcap_fp = pcap_create(pcap);
@@ -199,4 +266,113 @@ void parse_argv(int argc, char *argv[]) {
 
   // init random
   srand(current_ts_msec());
+}
+
+int open_device(std::string tun_name) {
+  int fd = -1;
+
+#ifdef __APPLE__
+  if (tun_name.find("utun") == 0 || tun_name == "") {
+    // utun
+    fd = socket(PF_SYSTEM, SOCK_DGRAM, SYSPROTO_CONTROL);
+    if (fd < 0) {
+      perror("socket");
+      return -1;
+    }
+
+    struct ctl_info info;
+    bzero(&info, sizeof(info));
+    strncpy(info.ctl_name, UTUN_CONTROL_NAME, strlen(UTUN_CONTROL_NAME));
+
+    if (ioctl(fd, CTLIOCGINFO, &info) < 0) {
+      perror("ioctl");
+      close(fd);
+      return -1;
+    }
+
+    struct sockaddr_ctl ctl;
+    ctl.sc_id = info.ctl_id;
+    ctl.sc_len = sizeof(ctl);
+    ctl.sc_family = AF_SYSTEM;
+    ctl.ss_sysaddr = AF_SYS_CONTROL;
+    ctl.sc_unit = 0;
+
+    if (tun_name.find("utun") == 0 && tun_name.length() > strlen("utun")) {
+      // user specified number
+      ctl.sc_unit =
+          stoi(tun_name.substr(tun_name.find("utun") + strlen("utun"))) + 1;
+    }
+
+    if (connect(fd, (struct sockaddr *)&ctl, sizeof(ctl)) < 0) {
+      perror("connect");
+      close(fd);
+      return -1;
+    }
+
+    char ifname[IFNAMSIZ];
+    socklen_t ifname_len = sizeof(ifname);
+
+    if (getsockopt(fd, SYSPROTO_CONTROL, UTUN_OPT_IFNAME, ifname, &ifname_len) <
+        0) {
+      perror("getsockopt");
+      close(fd);
+      return -1;
+    }
+    tun_name = ifname;
+    // utun has a 32-bit loopback header ahead of data
+    tun_padding_len = sizeof(uint32_t);
+  } else {
+    fprintf(stderr, "Bad tunnel name %s\n", tun_name.c_str());
+    return -1;
+  }
+
+  std::string command = "ifconfig '" + tun_name + "' up";
+  system(command.c_str());
+
+  // from macOS's perspective
+  // local/remote is reversed
+  command = std::string("ifconfig ") + "'" + tun_name + "' " + remote_ip + " " +
+            local_ip;
+  system(command.c_str());
+#else
+
+  struct ifreq ifr = {};
+  ifr.ifr_flags = IFF_TUN | IFF_NO_PI;
+  strncpy(ifr.ifr_name, tun_name.c_str(), IFNAMSIZ);
+
+  fd = open("/dev/net/tun", O_RDWR);
+  if (fd < 0) {
+    perror("failed to open /dev/net/tun");
+    exit(1);
+  } else {
+    if (ioctl(fd, TUNSETIFF, (void *)&ifr) < 0) {
+      perror("fail to set tun ioctl");
+      close(fd);
+      exit(1);
+    }
+    tun_name = ifr.ifr_name;
+
+    std::string command = "ip link set dev '" + tun_name + "' up";
+    system(command.c_str());
+
+    // from linux's perspective
+    // local/remote is reversed
+    command = std::string("ip addr add ") + remote_ip + " peer " + local_ip +
+              " dev '" + tun_name + "'";
+    system(command.c_str());
+  }
+
+#endif
+
+  printf("Device %s is now up.\n", tun_name.c_str());
+  io_config = IOConfig::TUN;
+  tun_fd = fd;
+  return fd;
+}
+
+void set_ip(const char *new_local_ip, const char *new_remote_ip) {
+  printf("Local IP is %s\n", new_local_ip);
+  printf("Remote IP is %s\n", new_remote_ip);
+  local_ip = new_local_ip;
+  remote_ip = new_remote_ip;
 }

@@ -14,6 +14,7 @@
 #include "timers.h"
 
 int main(int argc, char *argv[]) {
+  set_ip(client_ip_s, server_ip_s);
   parse_argv(argc, argv);
 
   // create socket and connect to server port 80

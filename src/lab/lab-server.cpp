@@ -15,6 +15,7 @@
 #include "timers.h"
 
 int main(int argc, char *argv[]) {
+  set_ip(server_ip_s, client_ip_s);
   parse_argv(argc, argv);
 
   int listen_fd = tcp_socket();

@@ -8,6 +8,7 @@
 #include <unistd.h>
 
 #include "common.h"
+#include "ip.h"
 #include "lwip/apps/httpd.h"
 #include "lwip/arch.h"
 #include "lwip/dhcp.h"
@@ -19,10 +20,11 @@
 #include "lwip_common.h"
 
 int main(int argc, char *argv[]) {
+  set_ip(server_ip_s, client_ip_s);
   parse_argv(argc, argv);
 
   // init lwip
-  setup_lwip("10.0.0.1");
+  setup_lwip(server_ip_s);
 
   httpd_init();
 

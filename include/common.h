@@ -7,6 +7,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <fcntl.h>
+#include <string>
 #include <sys/time.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -45,6 +46,12 @@ struct sockaddr_un create_sockaddr_un(const char *path);
 
 // setup unix socket
 int setup_unix_socket(const char *path);
+
+// setup tun device
+int open_device(std::string tun_name);
+
+// set local/remote ip
+void set_ip(const char *local_ip, const char *remote_ip);
 
 // taken from https://wiki.wireshark.org/Development/LibpcapFileFormat
 typedef struct pcap_header_s {

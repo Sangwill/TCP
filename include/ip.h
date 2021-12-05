@@ -24,9 +24,11 @@ struct IPHeader {
 };
 
 // client address 10.0.0.2
-const be32_t client_ip = htonl(0x0a000002);
+const static be32_t client_ip = htonl(0x0a000002);
+const static char *client_ip_s = "10.0.0.2";
 // server address 10.0.0.1
-const be32_t server_ip = htonl(0x0a000001);
+const static be32_t server_ip = htonl(0x0a000001);
+const static char *server_ip_s = "10.0.0.1";
 
 // process received IP
 void process_ip(const uint8_t *data, size_t size);

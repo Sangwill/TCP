@@ -9,6 +9,7 @@
 #include <unistd.h>
 
 #include "common.h"
+#include "ip.h"
 #include "lwip/apps/http_client.h"
 #include "lwip/arch.h"
 #include "lwip/dhcp.h"
@@ -39,12 +40,13 @@ void httpc_result(void *arg, httpc_result_t httpc_result, u32_t rx_content_len,
 }
 
 int main(int argc, char *argv[]) {
+  set_ip(client_ip_s, server_ip_s);
   parse_argv(argc, argv);
 
   // init lwip
-  setup_lwip("10.0.0.2");
+  setup_lwip(client_ip_s);
 
-  ip_addr_t server_addr = ip4_from_string("10.0.0.1");
+  ip_addr_t server_addr = ip4_from_string(server_ip_s);
   httpc_connection_t settings{0};
   settings.result_fn = httpc_result;
   httpc_get_file(&server_addr, 80, "/index.html", &settings, httpc_recv, NULL,
