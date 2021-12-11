@@ -1,25 +1,12 @@
 import time
-import sys
-import subprocess
+from common import kill, spawn_lab_client, spawn_lwip_server, quit
 
 prefix = '3way_handshake_client'
 
-def kill():
-    # kill processes
-    subprocess.run("killall lwip-server", shell=True, capture_output=True)
-    subprocess.run("killall lab-client", shell=True, capture_output=True)
-
-def quit(code):
-    kill()
-    sys.exit(code)
-
 kill()
 
-subprocess.Popen(["ninja", "run-lwip-server"], stdout=open(
-    f'{prefix}_lwip-server-stdout.log', 'w'), stderr=open(f'{prefix}_lwip-server-stderr.log', 'w'))
-time.sleep(1)
-subprocess.Popen(["ninja", "run-lab-client"], stdout=open(
-    f'{prefix}_lab-client-stdout.log', 'w'), stderr=open(f'{prefix}_lab-client-stderr.log', 'w'))
+spawn_lwip_server(prefix)
+spawn_lab_client(prefix)
 
 timeout = 5
 file = f'{prefix}_lab-client-stdout.log'

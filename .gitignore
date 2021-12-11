@@ -1,6 +1,7 @@
 *.o
 *.pcap
 
+__pycache__/
 builddir/
 .vscode/
 .idea/
