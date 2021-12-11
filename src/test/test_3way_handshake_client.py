@@ -1,9 +1,14 @@
 import time
+import os
 from common import kill, spawn_lab_client, spawn_lwip_server, quit
 
 prefix = '3way_handshake_client'
 
 kill()
+
+if not os.path.exists('build.ninja'):
+    print('Please run in builddir directory!')
+    quit(1)
 
 spawn_lwip_server(prefix)
 spawn_lab_client(prefix)
