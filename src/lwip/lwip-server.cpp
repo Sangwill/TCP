@@ -41,6 +41,7 @@ int main(int argc, char *argv[]) {
         pbuf_free(p);
       }
     }
+    fflush(stdout);
     sys_check_timeouts();
     loop_yield();
   }

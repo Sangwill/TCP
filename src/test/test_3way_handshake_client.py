@@ -9,21 +9,31 @@ spawn_lwip_server(prefix)
 spawn_lab_client(prefix)
 
 timeout = 5
-file = f'{prefix}_lab-client-stdout.log'
+client_stdout = f'{prefix}_lab-client-stdout.log'
+server_stdout = f'{prefix}_lwip-server-stdout.log'
 transitions = []
 for i in range(timeout):
-    with open(file, 'r') as f:
+    print('Reading output:')
+    with open(client_stdout, 'r') as f:
         for line in f:
+            line = line.strip()
             if 'TCP state transitioned from' in line:
-                line = line.strip()
                 parts = line.split(' ')
                 old_state = parts[4]
                 new_state = parts[6]
                 transitions.append((old_state, new_state))
-                print(line)
+                print('lab-client:', line)
+
+    server_established = False
+    with open(server_stdout, 'r') as f:
+        for line in f:
+            line = line.strip()
+            if 'TCP connection established' in line:
+                server_established = True
+                print('lwip-server:', line)
 
     # check state machine
-    if len(transitions) == 2:
+    if len(transitions) == 2 and server_established:
         assert(transitions[0] == ('CLOSED', 'SYN_SENT'))
         assert(transitions[1] == ('SYN_SENT', 'ESTABLISHED'))
         print('Passed')
