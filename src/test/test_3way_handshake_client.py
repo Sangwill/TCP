@@ -17,6 +17,7 @@ kill()
 
 subprocess.Popen(["ninja", "run-lwip-server"], stdout=open(
     f'{prefix}_lwip-server-stdout.log', 'w'), stderr=open(f'{prefix}_lwip-server-stderr.log', 'w'))
+time.sleep(1)
 subprocess.Popen(["ninja", "run-lab-client"], stdout=open(
     f'{prefix}_lab-client-stdout.log', 'w'), stderr=open(f'{prefix}_lab-client-stderr.log', 'w'))
 
@@ -32,6 +33,7 @@ for i in range(timeout):
                 old_state = parts[4]
                 new_state = parts[6]
                 transitions.append((old_state, new_state))
+                print(line)
 
     # check state machine
     if len(transitions) == 2:
