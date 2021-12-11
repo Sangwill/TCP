@@ -133,3 +133,8 @@ test('test 3-way handshake (client)',
     import('python').find_installation('python3'),
     args: [root / 'src/test/test_3way_handshake_client.py'],
     is_parallel : false)
+
+test('test http request & response (client)',
+    import('python').find_installation('python3'),
+    args: [root / 'src/test/test_http_client.py'],
+    is_parallel : false)
