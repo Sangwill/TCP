@@ -33,7 +33,7 @@ int main(int argc, char *argv[]) {
     }
 
     // next data
-    return 1000;
+    return 100;
   };
   TIMERS.schedule_job(read_fn, 1000);
 
