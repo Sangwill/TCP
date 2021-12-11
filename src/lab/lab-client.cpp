@@ -48,6 +48,10 @@ int main(int argc, char *argv[]) {
   int index = 0;
   size_t offset = 0;
   timer_fn write_fn = [&] {
+    if (tcp_state(tcp_fd) == TCPState::CLOSED) {
+      printf("Connection closed\n");
+      return -1;
+    }
     if (tcp_state(tcp_fd) != TCPState::ESTABLISHED) {
       printf("Waiting for connection establishment\n");
       return 1000;
