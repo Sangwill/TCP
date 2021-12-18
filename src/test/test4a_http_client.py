@@ -16,7 +16,7 @@ if not os.path.exists('build.ninja'):
 spawn_lwip_server(prefix)
 spawn_lab_client(prefix)
 
-timeout = 5
+timeout = 10
 client_stdout = f'{prefix}_lab-client-stdout.log'
 server_stdout = f'{prefix}_lwip-server-stdout.log'
 for i in range(timeout):
