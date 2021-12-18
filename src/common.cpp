@@ -46,6 +46,10 @@ const char *remote_ip = "";
 double recv_drop_rate = 0.0;
 double send_drop_rate = 0.0;
 
+// default congestion control algorithm
+CongestionControlAlgorithm current_cc_algo =
+    CongestionControlAlgorithm::Default;
+
 // taken from https://stackoverflow.com/a/1549344
 bool set_socket_blocking(int fd, bool blocking) {
   int flags = fcntl(fd, F_GETFL, 0);
@@ -192,6 +196,23 @@ ssize_t recv_packet(uint8_t *buffer, size_t buffer_size) {
   return size;
 }
 
+void set_congestion_control_algo(const char *algo) {
+  std::string s = algo;
+  if (s == "Default") {
+    current_cc_algo = CongestionControlAlgorithm::Default;
+    printf("Congestion Control Algo is Default\n");
+  } else if (s == "NewReno") {
+    current_cc_algo = CongestionControlAlgorithm::NewReno;
+    printf("Congestion Control Algo is NewReno\n");
+  } else if (s == "CUBIC") {
+    current_cc_algo = CongestionControlAlgorithm::CUBIC;
+    printf("Congestion Control Algo is CUBIC\n");
+  } else if (s == "BBR") {
+    current_cc_algo = CongestionControlAlgorithm::BBR;
+    printf("Congestion Control Algo is BBR\n");
+  }
+}
+
 void parse_argv(int argc, char *argv[]) {
   int c;
   int hflag = 0;
@@ -201,7 +222,7 @@ void parse_argv(int argc, char *argv[]) {
   char *tun = NULL;
 
   // parse arguments
-  while ((c = getopt(argc, argv, "hl:r:t:p:R:S:")) != -1) {
+  while ((c = getopt(argc, argv, "hl:r:t:p:R:S:c:")) != -1) {
     switch (c) {
     case 'h':
       hflag = 1;
@@ -226,6 +247,9 @@ void parse_argv(int argc, char *argv[]) {
       sscanf(optarg, "%lf", &send_drop_rate);
       printf("Send drop rate is now %lf\n", send_drop_rate);
       break;
+    case 'c':
+      set_congestion_control_algo(optarg);
+      break;
     case '?':
       fprintf(stderr, "Unknown option: %c\n", optopt);
       exit(1);
@@ -243,6 +267,7 @@ void parse_argv(int argc, char *argv[]) {
     fprintf(stderr, "\t-p PCAP: pcap file for debugging\n");
     fprintf(stderr, "\t-R FLOAT: recv packet drop rate\n");
     fprintf(stderr, "\t-S FLOAT: send packet drop rate\n");
+    fprintf(stderr, "\t-c ALGO: congestion control algorithm: Default, NewReno, CUBIC, BBR\n");
     exit(0);
   }
 

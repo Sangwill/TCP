@@ -37,6 +37,15 @@ extern FILE *pcap_fp;
 extern double recv_drop_rate;
 extern double send_drop_rate;
 
+// configurable congestion control algorithm
+enum CongestionControlAlgorithm {
+  Default,
+  NewReno,
+  CUBIC,
+  BBR,
+};
+extern CongestionControlAlgorithm current_cc_algo;
+
 // set socket to blocking/non-blocking
 bool set_socket_blocking(int fd, bool blocking);
 
@@ -130,13 +139,13 @@ void parse_argv(int argc, char *argv[]);
 
 // ref: https://stackoverflow.com/a/3586005/2148614
 // you can use these to colorize your output
-#define RED   "\x1B[31m"
-#define GRN   "\x1B[32m"
-#define YEL   "\x1B[33m"
-#define BLU   "\x1B[34m"
-#define MAG   "\x1B[35m"
-#define CYN   "\x1B[36m"
-#define WHT   "\x1B[37m"
+#define RED "\x1B[31m"
+#define GRN "\x1B[32m"
+#define YEL "\x1B[33m"
+#define BLU "\x1B[34m"
+#define MAG "\x1B[35m"
+#define CYN "\x1B[36m"
+#define WHT "\x1B[37m"
 #define RESET "\x1B[0m"
 
 #endif
