@@ -137,9 +137,14 @@ root = meson.source_root()
 python3 = import('python').find_installation('python3')
 sudo = find_program('sudo')
 
-test('test3 3-way handshake (client)',
+test('test3a 3-way handshake (client)',
     python3,
-    args: [root / 'src/test/test3_3way_handshake_client.py'],
+    args: [root / 'src/test/test3a_3way_handshake_client.py'],
+    is_parallel : false)
+
+test('test3b 3-way handshake (client)',
+    python3,
+    args: [root / 'src/test/test3b_3way_handshake_client.py'],
     is_parallel : false)
 
 test('test4 http request & response (client)',

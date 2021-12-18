@@ -23,6 +23,7 @@
 #define TCP_WND_DEBUG LWIP_DBG_ON
 #define TCP_OUTPUT_DEBUG LWIP_DBG_ON
 #define TCP_RST_DEBUG LWIP_DBG_ON
+#define TCP_INPUT_DEBUG LWIP_DBG_ON
 
 // system related settings
 #define SYS_LIGHTWEIGHT_PROT 0
