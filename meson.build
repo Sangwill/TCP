@@ -108,6 +108,11 @@ run_target('run-lab-client',
   command : [lab_client, '-l', 'c', '-r', 's', '-p', 'lab-client.pcap']
 )
 
+run_target('run-lab-client-tun',
+  depends: [lab_client],
+  command : [lab_client, '-t', 'utun', '-p', 'lab-client.pcap']
+)
+
 run_target('run-lab-server',
   depends: [lab_server],
   command : [lab_server, '-l', 's', '-r', 'c', '-p', 'lab-server.pcap']
@@ -129,12 +134,20 @@ test2_initial_seq = executable('test2-initial-seq',
 test('test2 initial seq generation', test2_initial_seq)
 
 root = meson.source_root()
+python3 = import('python').find_installation('python3')
+sudo = find_program('sudo')
+
 test('test3 3-way handshake (client)',
-    import('python').find_installation('python3'),
+    python3,
     args: [root / 'src/test/test3_3way_handshake_client.py'],
     is_parallel : false)
 
 test('test4 http request & response (client)',
-    import('python').find_installation('python3'),
+    python3,
     args: [root / 'src/test/test4_http_client.py'],
+    is_parallel : false)
+
+test('test5 visit baidu (client) (requires sudo)',
+    sudo,
+    args: ['python3', root / 'src/test/test5_visit_baidu.py'],
     is_parallel : false)
