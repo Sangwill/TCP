@@ -691,7 +691,7 @@ ssize_t tcp_read(int fd, uint8_t *data, size_t size) {
   return 0;
 }
 
-void tcp_shutdown(int fd, bool readHalf, bool writeHalf) {
+void tcp_shutdown(int fd) {
   // TODO(step 4: connection termination)
   TCP *tcp = tcp_fds[fd];
   assert(tcp);

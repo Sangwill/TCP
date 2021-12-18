@@ -3,6 +3,7 @@
 
 #include "common.h"
 #include "ip.h"
+#include <map>
 #include <queue>
 #include <stdint.h>
 #include <stdlib.h>
@@ -112,9 +113,11 @@ struct TCP {
   // pending accept queue
   std::deque<int> accept_queue;
 
-  TCP() {
-    state = TCPState::CLOSED;
-  }
+  // slow start and congestion avoidance
+  uint32_t cwnd;
+  uint32_t ssthresh;
+
+  TCP() { state = TCPState::CLOSED; }
 
   // state transition with debug output
   void set_state(TCPState new_state);
@@ -163,8 +166,7 @@ ssize_t tcp_write(int fd, const uint8_t *data, size_t size);
 ssize_t tcp_read(int fd, uint8_t *data, size_t size);
 
 // shutdown TCP connection
-// allow half close
-void tcp_shutdown(int fd, bool readHalf, bool writeHalf);
+void tcp_shutdown(int fd);
 
 // closes and free fd
 void tcp_close(int fd);
