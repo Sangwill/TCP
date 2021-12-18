@@ -19,9 +19,9 @@ spawn_lab_client(prefix)
 timeout = 10
 client_stdout = f'{prefix}_lab-client-stdout.log'
 server_stdout = f'{prefix}_lwip-server-stdout.log'
-transitions = []
 for i in range(timeout):
     print('Reading output:')
+    transitions = []
     with open(client_stdout, 'r') as f:
         for line in f:
             line = line.strip()
