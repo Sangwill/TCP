@@ -26,6 +26,9 @@ int main(int argc, char *argv[]) {
   // and write to stdout & file
   FILE *fp = fopen("index.html", "w");
   assert(fp);
+  char *pwd = getenv("PWD");
+  printf("Writing http response body to %s/index.html\n", pwd);
+
   bool http_response_header_done = false;
   std::vector<uint8_t> read_http_response;
 
