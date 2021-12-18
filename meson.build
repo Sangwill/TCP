@@ -114,27 +114,27 @@ run_target('run-lab-server',
 )
 
 # testing
-test_initial_seq = executable('test-initial-seq',
+test1_seq_compare = executable('test1-seq-compare',
             lab_sources,
             common_sources,
-            'src/test/test_initial_seq.cpp',
+            'src/test/test1_seq_compare.cpp',
             include_directories: incdir)
-test('test initial seq generation', test_initial_seq)
+test('test1 seq comparison', test1_seq_compare)
 
-test_seq_compare = executable('test-seq-compare',
+test2_initial_seq = executable('test2-initial-seq',
             lab_sources,
             common_sources,
-            'src/test/test_seq_compare.cpp',
+            'src/test/test2_initial_seq.cpp',
             include_directories: incdir)
-test('test seq comparison', test_seq_compare)
+test('test2 initial seq generation', test2_initial_seq)
 
 root = meson.source_root()
-test('test 3-way handshake (client)',
+test('test3 3-way handshake (client)',
     import('python').find_installation('python3'),
-    args: [root / 'src/test/test_3way_handshake_client.py'],
+    args: [root / 'src/test/test3_3way_handshake_client.py'],
     is_parallel : false)
 
-test('test http request & response (client)',
+test('test4 http request & response (client)',
     import('python').find_installation('python3'),
-    args: [root / 'src/test/test_http_client.py'],
+    args: [root / 'src/test/test4_http_client.py'],
     is_parallel : false)
