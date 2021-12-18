@@ -697,7 +697,20 @@ void tcp_shutdown(int fd) {
   assert(tcp);
 }
 
-void tcp_close(int fd) {}
+void tcp_close(int fd) {
+  // shutdown first
+  tcp_shutdown(fd);
+
+  TCP *tcp = tcp_fds[fd];
+  assert(tcp);
+
+  // remove connection if closed
+  if (tcp->state == TCPState::CLOSED) {
+    printf("Removing TCP connection fd=%d\n", fd);
+    tcp_fds.erase(fd);
+    delete tcp;
+  }
+}
 
 void tcp_bind(int fd, be32_t addr, uint16_t port) {
   TCP *tcp = tcp_fds[fd];
