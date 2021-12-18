@@ -52,9 +52,27 @@ int main(int argc, char *argv[]) {
               read_http_response[i + 1] == '\n' &&
               read_http_response[i + 2] == '\r' &&
               read_http_response[i + 3] == '\n') {
-            http_response_header_done = true;
-            fwrite(&read_http_response[i + 4], 1,
-                   read_http_response.size() - i - 4, fp);
+            std::string resp((char *)read_http_response.data(),
+                             read_http_response.size());
+
+            // find content length
+            std::string content_length = "Content-Length: ";
+            size_t pos = resp.find(content_length);
+            assert(pos != std::string::npos);
+            int length = -1;
+            sscanf(&resp[pos + content_length.length()], "%d", &length);
+            printf("Content Length is %d\n", length);
+            assert(length >= 0);
+
+            // check if body is long enough
+            int size = read_http_response.size() - i - 4;
+            if (size >= length) {
+              http_response_header_done = true;
+              fwrite(&read_http_response[i + 4], 1, size, fp);
+
+              tcp_close(tcp_fd);
+            }
+
             break;
           }
         }
