@@ -103,6 +103,11 @@ run_target('run-lwip-client',
   command : [lwip_client, '-l', 'c', '-r', 's', '-p', 'client.pcap']
 )
 
+run_target('run-lwip-client-tun',
+  depends: [lwip_client],
+  command : ['sudo', lwip_client, '-t', 'utun', '-p', 'lwip-client.pcap']
+)
+
 run_target('run-lab-client',
   depends: [lab_client],
   command : [lab_client, '-l', 'c', '-r', 's', '-p', 'lab-client.pcap']

@@ -52,7 +52,10 @@ err_t httpc_headers_done(httpc_state_t *connection, void *arg, struct pbuf *hdr,
 
 void httpc_result(void *arg, httpc_result_t httpc_result, u32_t rx_content_len,
                   u32_t srv_res, err_t err) {
-  printf("HTTP Result: %d\n", httpc_result);
+  printf("Server Result: %d\n", srv_res);
+  printf("Content Length: %d\n", rx_content_len);
+  printf("Exiting\n");
+  exit(0);
 }
 
 int main(int argc, char *argv[]) {

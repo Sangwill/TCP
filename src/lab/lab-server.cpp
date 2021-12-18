@@ -18,10 +18,12 @@ struct write_response {
   int fd;
   int index = 0;
   size_t offset = 0;
-  const char *data[3] = {
+  const char *data[5] = {
       "HTTP/1.1 200 OK\r\n",
-      "Content-Length: 0\r\n",
+      "Content-Length: 13\r\n",
+      "Content-Type: text/plain; charset=utf-8\r\n",
       "\r\n",
+      "Hello World!\n",
   };
 
   size_t operator()() {
@@ -41,9 +43,12 @@ struct write_response {
     }
 
     // next data
-    if (index < 3) {
+    if (index < 5) {
       return 100;
     } else {
+      // done, closing
+      printf("Closing socket %d\n", fd);
+      tcp_close(fd);
       return -1;
     }
   }
