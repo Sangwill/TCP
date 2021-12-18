@@ -1,5 +1,6 @@
 *.o
 *.pcap
+*.html
 
 __pycache__/
 builddir/

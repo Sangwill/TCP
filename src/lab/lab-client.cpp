@@ -22,13 +22,18 @@ int main(int argc, char *argv[]) {
   tcp_connect(tcp_fd, server_ip, 80);
 
   // always try to read from tcp
-  // and write to stdout
+  // and write to stdout & file
+  FILE *fp = fopen("index.html", "w");
+  assert(fp);
+
   timer_fn read_fn = [&] {
     char buffer[1024];
     ssize_t res = tcp_read(tcp_fd, (uint8_t *)buffer, sizeof(buffer) - 1);
     if (res > 0) {
       printf("Read '");
       fwrite(buffer, res, 1, stdout);
+      fwrite(buffer, res, 1, fp);
+      fflush(fp);
       printf("' from tcp\n");
     }
 

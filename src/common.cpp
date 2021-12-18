@@ -38,7 +38,6 @@ int tun_fd = 0;
 FILE *pcap_fp = nullptr;
 int tun_padding_len = 0;
 const uint32_t tun_padding_v4 = htonl(AF_INET);
-const uint32_t tun_padding_v6 = htonl(AF_INET6);
 const char *local_ip = "";
 const char *remote_ip = "";
 
@@ -327,6 +326,11 @@ int open_device(std::string tun_name) {
   }
 
   std::string command = "ifconfig '" + tun_name + "' up";
+  printf("Running: %s\n", command.c_str());
+  system(command.c_str());
+
+  const int mtu = 1496; // 4 bytes padding
+  command = "ifconfig '" + tun_name + "' mtu " + std::to_string(mtu);
   printf("Running: %s\n", command.c_str());
   system(command.c_str());
 
