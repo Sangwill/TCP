@@ -4,6 +4,7 @@
 #include "tcp.h"
 
 int main(int argc, char *argv[]) {
+  // test sequence comparison functions
   assert(tcp_seq_lt(0x00000000, 0x00000001));
   assert(tcp_seq_lt(0xFFFFFFFF, 0x00000000));
   assert(tcp_seq_lt(0x00001000, 0x00002000));

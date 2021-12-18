@@ -2,6 +2,9 @@ import time
 import os
 from common import kill, spawn_lab_server, spawn_lwip_client, quit
 
+# spawn lab-server and lwip-client
+# check the tcp state machine
+
 prefix = '3way_handshake_server'
 
 kill()
