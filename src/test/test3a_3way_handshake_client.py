@@ -41,7 +41,7 @@ for i in range(timeout):
                 print('lwip-server:', line)
 
     # check state machine
-    if len(transitions) == 2 and server_established:
+    if len(transitions) >= 2 and server_established:
         assert(transitions[0] == ('CLOSED', 'SYN_SENT'))
         assert(transitions[1] == ('SYN_SENT', 'ESTABLISHED'))
         print('Passed')
