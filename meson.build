@@ -147,9 +147,14 @@ test('test3b 3-way handshake (server)',
     args: [root / 'src/test/test3b_3way_handshake_server.py'],
     is_parallel : false)
 
-test('test4 http request & response (client)',
+test('test4a http request & response (client)',
     python3,
-    args: [root / 'src/test/test4_http_client.py'],
+    args: [root / 'src/test/test4a_http_client.py'],
+    is_parallel : false)
+
+test('test4b http request & response (server)',
+    python3,
+    args: [root / 'src/test/test4b_http_server.py'],
     is_parallel : false)
 
 test('test5 visit baidu (client) (requires sudo)',

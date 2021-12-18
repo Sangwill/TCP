@@ -2,7 +2,10 @@ import time
 import os
 from common import kill, spawn_lab_client, spawn_lwip_server, quit
 
-prefix = '3way_handshake_client'
+# spawn lwip-server and lab-client
+# check http request & response
+
+prefix = 'http_client'
 
 kill()
 
