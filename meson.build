@@ -144,7 +144,7 @@ test('test3a 3-way handshake (client)',
 
 test('test3b 3-way handshake (client)',
     python3,
-    args: [root / 'src/test/test3b_3way_handshake_client.py'],
+    args: [root / 'src/test/test3b_3way_handshake_server.py'],
     is_parallel : false)
 
 test('test4 http request & response (client)',
