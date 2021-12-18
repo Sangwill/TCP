@@ -4,6 +4,10 @@ import subprocess
 import atexit
 from common import kill, spawn_lab_client_tun, quit, kill_callback
 
+if os.getuid() != 0:
+    print('Please run this test with sudo!')
+    quit(1)
+
 prefix = 'visit_baidu'
 
 kill()
