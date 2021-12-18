@@ -231,7 +231,7 @@ void process_tcp(const IPHeader *ip, const uint8_t *data, size_t size) {
           new_tcp->snd_wnd = seg_wnd;
           new_tcp->rcv_wnd = new_tcp->recv.free_bytes();
           new_tcp->snd_wl2 = initial_seq - 1;
-          new_tcp->state = TCPState::SYN_RCVD;
+          new_tcp->set_state(TCPState::SYN_RCVD);
           return;
         }
       }
