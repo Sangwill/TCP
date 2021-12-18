@@ -43,10 +43,8 @@ const char *remote_ip = "";
 
 // random packet drop
 // never drop by default
-int recv_drop_numerator = 0;
-int recv_drop_denominator = 1;
-int send_drop_numerator = 0;
-int send_drop_denominator = 1;
+double recv_drop_rate = 0.0;
+double send_drop_rate = 0.0;
 
 // taken from https://stackoverflow.com/a/1549344
 bool set_socket_blocking(int fd, bool blocking) {
@@ -123,7 +121,7 @@ void send_packet(const uint8_t *data, size_t size) {
   }
   printf("\n");
 
-  if (rand() % send_drop_denominator < send_drop_numerator) {
+  if ((double)rand() / RAND_MAX < send_drop_rate) {
     printf("Send packet dropped\n");
     return;
   }
@@ -181,7 +179,7 @@ ssize_t recv_packet(uint8_t *buffer, size_t buffer_size) {
     }
     printf("\n");
 
-    if (rand() % recv_drop_denominator < recv_drop_numerator) {
+    if ((double)rand() / RAND_MAX < recv_drop_rate) {
       printf("Recv packet dropped\n");
       return -1;
     }
@@ -203,7 +201,7 @@ void parse_argv(int argc, char *argv[]) {
   char *tun = NULL;
 
   // parse arguments
-  while ((c = getopt(argc, argv, "hl:r:t:p:")) != -1) {
+  while ((c = getopt(argc, argv, "hl:r:t:p:R:S:")) != -1) {
     switch (c) {
     case 'h':
       hflag = 1;
@@ -220,6 +218,14 @@ void parse_argv(int argc, char *argv[]) {
     case 'p':
       pcap = optarg;
       break;
+    case 'R':
+      sscanf(optarg, "%lf", &recv_drop_rate);
+      printf("Rend drop rate is now %lf\n", recv_drop_rate);
+      break;
+    case 'S':
+      sscanf(optarg, "%lf", &send_drop_rate);
+      printf("Send drop rate is now %lf\n", send_drop_rate);
+      break;
     case '?':
       fprintf(stderr, "Unknown option: %c\n", optopt);
       exit(1);
@@ -235,6 +241,8 @@ void parse_argv(int argc, char *argv[]) {
     fprintf(stderr, "\t-r REMOTE: remote unix socket path\n");
     fprintf(stderr, "\t-t TUN: use tun interface\n");
     fprintf(stderr, "\t-p PCAP: pcap file for debugging\n");
+    fprintf(stderr, "\t-R FLOAT: recv packet drop rate\n");
+    fprintf(stderr, "\t-S FLOAT: send packet drop rate\n");
     exit(0);
   }
 

@@ -32,11 +32,10 @@ extern struct sockaddr_un remote_addr;
 extern int socket_fd;
 extern FILE *pcap_fp;
 
-// configurable packet drop rate(=numerator/denominator)
-extern int recv_drop_numerator;
-extern int recv_drop_denominator;
-extern int send_drop_numerator;
-extern int send_drop_denominator;
+// configurable packet drop rate
+// can be set in command line
+extern double recv_drop_rate;
+extern double send_drop_rate;
 
 // set socket to blocking/non-blocking
 bool set_socket_blocking(int fd, bool blocking);
