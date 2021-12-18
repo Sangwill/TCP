@@ -28,7 +28,7 @@ int main(int argc, char *argv[]) {
 
   httpd_init();
 
-  const size_t buffer_size = 1500;
+  const size_t buffer_size = 2048;
   u8_t buffer[buffer_size];
   while (1) {
     ssize_t size = recv_packet(buffer, buffer_size);

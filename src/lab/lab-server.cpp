@@ -113,7 +113,7 @@ int main(int argc, char *argv[]) {
   TIMERS.schedule_job(accept_fn, 1000);
 
   // main loop
-  const size_t buffer_size = 1500; // MTU
+  const size_t buffer_size = 2048;
   uint8_t buffer[buffer_size];
   while (1) {
     ssize_t size = recv_packet(buffer, buffer_size);

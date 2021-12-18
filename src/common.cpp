@@ -362,11 +362,6 @@ int open_device(std::string tun_name) {
   printf("Running: %s\n", command.c_str());
   system(command.c_str());
 
-  const int mtu = 1496; // 4 bytes padding
-  command = "ifconfig '" + tun_name + "' mtu " + std::to_string(mtu);
-  printf("Running: %s\n", command.c_str());
-  system(command.c_str());
-
   // from macOS's perspective
   // local/remote is reversed
   command = std::string("ifconfig ") + "'" + tun_name + "' " + remote_ip + " " +
