@@ -28,6 +28,9 @@ run-lwip-client: builddir
 run-lab-client: builddir
 	ninja -C builddir run-lab-client
 
+run-lab-client-tun: builddir
+	ninja -C builddir run-lab-client-tun
+
 run-lab-server: builddir
 	ninja -C builddir run-lab-server
 
