@@ -1,3 +1,4 @@
+#include <assert.h>
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -25,16 +26,37 @@ int main(int argc, char *argv[]) {
   // and write to stdout & file
   FILE *fp = fopen("index.html", "w");
   assert(fp);
+  bool http_response_header_done = false;
+  std::vector<uint8_t> read_http_response;
 
   timer_fn read_fn = [&] {
     char buffer[1024];
     ssize_t res = tcp_read(tcp_fd, (uint8_t *)buffer, sizeof(buffer) - 1);
     if (res > 0) {
       printf("Read '");
-      fwrite(buffer, res, 1, stdout);
-      fwrite(buffer, res, 1, fp);
-      fflush(fp);
+      fwrite(buffer, 1, res, stdout);
       printf("' from tcp\n");
+
+      if (http_response_header_done) {
+        // directly write to file
+        fwrite(buffer, 1, res, fp);
+      } else {
+        read_http_response.insert(read_http_response.end(), &buffer[0],
+                                  &buffer[res]);
+        // find consecutive \r\n\r\n
+        for (size_t i = 0; i + 3 < read_http_response.size(); i++) {
+          if (read_http_response[i] == '\r' &&
+              read_http_response[i + 1] == '\n' &&
+              read_http_response[i + 2] == '\r' &&
+              read_http_response[i + 3] == '\n') {
+            http_response_header_done = true;
+            fwrite(&read_http_response[i + 4], 1,
+                   read_http_response.size() - i - 4, fp);
+            break;
+          }
+        }
+      }
+      fflush(fp);
     }
 
     // next data
