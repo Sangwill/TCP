@@ -74,7 +74,7 @@ uint32_t generate_initial_seq() {
   // "The generator is bound to a (possibly fictitious) 32
   // bit clock whose low order bit is incremented roughly every 4
   // microseconds."
-  // TODO(feature 2.2 initial sequence number selection)
+  // TODO(step 1 sequence number comparison and generation)
   UNIMPLEMENTED()
   return 0;
 }
@@ -260,7 +260,7 @@ void process_tcp(const IPHeader *ip, const uint8_t *data, size_t size) {
         // "fourth check the SYN bit"
         if (tcp_header->syn) {
           // update variables
-          // TODO(feature 1.1 basic 3-way handshake)
+          // TODO(step 2 3-way handshake)
 
           if (tcp_seq_gt(tcp->snd_una, tcp->iss)) {
             // "our SYN has been ACKed"
@@ -325,7 +325,7 @@ void process_tcp(const IPHeader *ip, const uint8_t *data, size_t size) {
 
           // ESTABLISHED STATE
           if (tcp->state == ESTABLISHED) {
-            // TODO(feature 5.1 send and receive window)
+            // TODO(step 3 send & receive)
             // "If SND.UNA < SEG.ACK =< SND.NXT then, set SND.UNA <- SEG.ACK."
             UNIMPLEMENTED()
 
@@ -344,7 +344,7 @@ void process_tcp(const IPHeader *ip, const uint8_t *data, size_t size) {
             // segment text to user RECEIVE buffers."
             printf("Received %d bytes from server\n", seg_len);
 
-            // TODO(feature 4.2 simple client RECEIVE from server)
+            // TODO(step 3 send & receive)
             // write to recv buffer
             tcp->rcv_nxt += seg_len;
 
@@ -361,8 +361,8 @@ void process_tcp(const IPHeader *ip, const uint8_t *data, size_t size) {
           // over the FIN, and send an acknowledgment for the FIN.  Note that
           // FIN implies PUSH for any segment text not yet delivered to the
           // user."
-          // TODO(feature 3.2 TCP receives a FIN from the network)
 
+          // TODO(step 4 connection termination)
           if (tcp->state == SYN_RCVD || tcp->state == ESTABLISHED) {
             // advance RCV.NXT
             // over the FIN, and send an acknowledgment for the FIN.
@@ -529,7 +529,7 @@ bool verify_tcp_checksum(const IPHeader *ip, const TCPHeader *tcp) {
   return checksum == 0xffff;
 }
 
-// TODO(feature 2.1 sequence arithmetic)
+// TODO(step 1 sequence number comparison and generation)
 bool tcp_seq_lt(uint32_t a, uint32_t b) {
   UNIMPLEMENTED()
   return true;
@@ -606,9 +606,11 @@ void tcp_connect(int fd, uint32_t dst_addr, uint16_t dst_port) {
   // flags
   tcp_hdr->doff = 24 / 4; // 24 bytes
   tcp_hdr->syn = 1;
-  // TODO(feature 5.1 send and receive window)
+
+  // TODO(step 3 send & receive)
   // windows size: size of empty bytes in recv buffer
   tcp_hdr->window = 0;
+
   // mss option, rfc793 page 18
   // https://www.rfc-editor.org/rfc/rfc793.html#page-18
   buffer[40] = 0x02; // kind
@@ -622,7 +624,7 @@ void tcp_connect(int fd, uint32_t dst_addr, uint16_t dst_port) {
 }
 
 ssize_t tcp_write(int fd, const uint8_t *data, size_t size) {
-  // TODO(feature 4.1 simple client SEND to server)
+  // TODO(step 3 send & receive)
   TCP *tcp = tcp_fds[fd];
   assert(tcp);
 
@@ -662,7 +664,7 @@ ssize_t tcp_write(int fd, const uint8_t *data, size_t size) {
       // flags
       tcp_hdr->doff = 20 / 4; // 20 bytes
 
-      // TODO(feature 5.1 send and receive window)
+      // TODO(step 3 send & receive)
       // windows size: size of empty bytes in recv buffer
       tcp_hdr->window = 0;
 
@@ -681,7 +683,7 @@ ssize_t tcp_write(int fd, const uint8_t *data, size_t size) {
 }
 
 ssize_t tcp_read(int fd, uint8_t *data, size_t size) {
-  // TODO(feature 4.2 simple client RECEIVE from server)
+  // TODO(step 3 send & receive)
   TCP *tcp = tcp_fds[fd];
   assert(tcp);
 
@@ -689,7 +691,7 @@ ssize_t tcp_read(int fd, uint8_t *data, size_t size) {
 }
 
 void tcp_shutdown(int fd, bool readHalf, bool writeHalf) {
-  // TODO(feature 3.1 local user initiates the close)
+  // TODO(step 4 connection termination)
 }
 
 void tcp_close(int fd) {}

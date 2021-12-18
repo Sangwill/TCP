@@ -89,7 +89,6 @@ struct TCP {
   uint16_t local_mss;
   uint16_t remote_mss;
 
-  // TODO(feature 2.3 send/receive sequence variables)
   // see rfc793 page 20 fig 4 send sequence space
   // https://www.rfc-editor.org/rfc/rfc793.html#page-20
   // acknowledged: seq < snd_una
