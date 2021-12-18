@@ -14,6 +14,93 @@
 #include "tcp.h"
 #include "timers.h"
 
+// gracefully close socket and exit when closed
+struct close_and_exit {
+  int fd;
+  size_t operator()() {
+    TCPState state = tcp_state(fd);
+    // gracefully shutdown
+    if (state == TCPState::CLOSED) {
+      tcp_close(fd);
+      exit(0);
+      return -1;
+    } else {
+      tcp_shutdown(fd);
+      return 100;
+    }
+  }
+};
+
+// read http response
+struct read_http_response {
+  int fd;
+  // output file
+  FILE *fp;
+  // parsing state
+  bool http_response_header_done = false;
+  std::vector<uint8_t> read_http_response;
+  int content_length = -1;
+  int read_body_length = 0;
+
+  int operator()() {
+    char buffer[1024];
+    ssize_t res = tcp_read(fd, (uint8_t *)buffer, sizeof(buffer) - 1);
+    if (res > 0) {
+      printf("Read '");
+      fwrite(buffer, 1, res, stdout);
+      printf("' from tcp\n");
+
+      read_http_response.insert(read_http_response.end(), &buffer[0],
+                                &buffer[res]);
+      if (!http_response_header_done) {
+        // find consecutive \r\n\r\n
+        for (size_t i = 0; i + 3 < read_http_response.size(); i++) {
+          if (read_http_response[i] == '\r' &&
+              read_http_response[i + 1] == '\n' &&
+              read_http_response[i + 2] == '\r' &&
+              read_http_response[i + 3] == '\n') {
+            http_response_header_done = true;
+            std::string resp((char *)read_http_response.data(),
+                             read_http_response.size());
+
+            // find content length
+            std::string content_length_header = "Content-Length: ";
+            size_t pos = resp.find(content_length_header);
+            assert(pos != std::string::npos);
+            sscanf(&resp[pos + content_length_header.length()], "%d",
+                   &content_length);
+            printf("Content Length is %d\n", content_length);
+            assert(content_length >= 0);
+
+            // check if body is long enough
+            int body_size = read_http_response.size() - i - 4;
+            read_body_length += body_size;
+            fwrite(&read_http_response[i + 4], 1, body_size, fp);
+
+            break;
+          }
+        }
+      } else {
+        // write to file
+        read_body_length += res;
+        fwrite(buffer, 1, res, fp);
+      }
+      fflush(fp);
+
+      if (read_body_length >= content_length) {
+        // done
+        close_and_exit fn;
+        fn.fd = fd;
+        TIMERS.schedule_job(fn, 0);
+        return -1;
+      }
+    }
+
+    // try to read next data
+    return 100;
+  }
+};
+
 int main(int argc, char *argv[]) {
   set_ip(client_ip_s, server_ip_s);
   parse_argv(argc, argv);
@@ -70,7 +157,9 @@ int main(int argc, char *argv[]) {
               http_response_header_done = true;
               fwrite(&read_http_response[i + 4], 1, size, fp);
 
-              tcp_close(tcp_fd);
+              close_and_exit fn;
+              fn.fd = tcp_fd;
+              TIMERS.schedule_job(fn, 0);
             }
 
             break;
