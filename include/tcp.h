@@ -64,8 +64,8 @@ enum TCPState {
   CLOSED,
 };
 
-const size_t RECV_BUFF_SIZE = 4096;
-const size_t SEND_BUFF_SIZE = 4096;
+const size_t RECV_BUFF_SIZE = 10240;
+const size_t SEND_BUFF_SIZE = 10240;
 
 // Transmission Control Block
 // rfc793 Page 10 Section 3.2
