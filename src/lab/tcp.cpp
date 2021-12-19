@@ -332,13 +332,13 @@ void process_tcp(const IPHeader *ip, const uint8_t *data, size_t size) {
         // "There are four cases for the acceptability test for an incoming
         // segment:"
         bool acceptable = false;
-        UNIMPLEMENTED()
+        UNIMPLEMENTED_WARN();
 
         // "If an incoming segment is not acceptable, an acknowledgment
         // should be sent in reply (unless the RST bit is set, if so drop
         // the segment and return):"
         if (!acceptable) {
-          UNIMPLEMENTED();
+          UNIMPLEMENTED_WARN();
         }
 
         // "second check the RST bit,"
