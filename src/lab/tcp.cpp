@@ -367,6 +367,7 @@ void process_tcp(const IPHeader *ip, const uint8_t *data, size_t size) {
             // "If SND.UNA < SEG.ACK =< SND.NXT then, set SND.UNA <- SEG.ACK."
             UNIMPLEMENTED()
 
+            // TODO(step 3: send & receive)
             // "If SND.UNA < SEG.ACK =< SND.NXT, the send window should be
             // updated.  If (SND.WL1 < SEG.SEQ or (SND.WL1 = SEG.SEQ and
             // SND.WL2 =< SEG.ACK)), set SND.WND <- SEG.WND, set
@@ -388,7 +389,7 @@ void process_tcp(const IPHeader *ip, const uint8_t *data, size_t size) {
             // RCV.NXT over the data accepted, and adjusts RCV.WND as
             // appropriate to the current buffer availability.  The total of
             // RCV.NXT and RCV.WND should not be reduced."
-            tcp->rcv_nxt += seg_len;
+            UNIMPLEMENTED()
 
             // "Send an acknowledgment of the form:
             // <SEQ=SND.NXT><ACK=RCV.NXT><CTL=ACK>"
@@ -412,6 +413,7 @@ void process_tcp(const IPHeader *ip, const uint8_t *data, size_t size) {
           //  over the FIN, and send an acknowledgment for the FIN.  Note that
           //  FIN implies PUSH for any segment text not yet delivered to the
           //  user."
+          UNIMPLEMENTED();
 
           if (tcp->state == SYN_RCVD || tcp->state == ESTABLISHED) {
             // Enter the CLOSE-WAIT state
@@ -654,8 +656,9 @@ void tcp_connect(int fd, uint32_t dst_addr, uint16_t dst_port) {
   tcp_hdr->syn = 1;
 
   // TODO(step 3: send & receive)
-  // windows size: size of empty bytes in recv buffer
+  // window size: size of empty bytes in recv buffer
   tcp_hdr->window = 0;
+  UNIMPLEMENTED();
 
   // mss option, rfc793 page 18
   // https://www.rfc-editor.org/rfc/rfc793.html#page-18
@@ -670,7 +673,6 @@ void tcp_connect(int fd, uint32_t dst_addr, uint16_t dst_port) {
 }
 
 ssize_t tcp_write(int fd, const uint8_t *data, size_t size) {
-  // TODO(step 3: send & receive)
   TCP *tcp = tcp_fds[fd];
   assert(tcp);
 
@@ -686,7 +688,10 @@ ssize_t tcp_write(int fd, const uint8_t *data, size_t size) {
 
     // send data to remote
     size_t bytes_to_send = tcp->send.size;
+
+    // TODO(step 3: send & receive)
     // consider mss and send sequence space
+    // compute the segment length to send
     UNIMPLEMENTED()
     size_t segment_len = 0;
     if (segment_len > 0) {
@@ -711,8 +716,9 @@ ssize_t tcp_write(int fd, const uint8_t *data, size_t size) {
       tcp_hdr->doff = 20 / 4; // 20 bytes
 
       // TODO(step 3: send & receive)
-      // windows size: size of empty bytes in recv buffer
+      // window size: size of empty bytes in recv buffer
       tcp_hdr->window = 0;
+      UNIMPLEMENTED();
 
       // payload
       size_t bytes_read = tcp->send.read(&buffer[40], segment_len);
@@ -729,17 +735,37 @@ ssize_t tcp_write(int fd, const uint8_t *data, size_t size) {
 }
 
 ssize_t tcp_read(int fd, uint8_t *data, size_t size) {
-  // TODO(step 3: send & receive)
   TCP *tcp = tcp_fds[fd];
   assert(tcp);
+
+  // TODO(step 3: send & receive)
+  // copy from recv_buffer to user data
+  UNIMPLEMENTED();
 
   return 0;
 }
 
 void tcp_shutdown(int fd) {
-  // TODO(step 4: connection termination)
   TCP *tcp = tcp_fds[fd];
   assert(tcp);
+
+  // CLOSE Call
+  // ESTABLISHED STATE
+  if (tcp->state == TCPState::ESTABLISHED) {
+    // TODO(step 4: connection termination)
+    // "Queue this until all preceding SENDs have been segmentized, then
+    // form a FIN segment and send it. In any case, enter FIN-WAIT-1 state."
+    UNIMPLEMENTED();
+
+    tcp->set_state(TCPState::FIN_WAIT_1);
+  } else if (tcp->state == TCPState::CLOSE_WAIT) {
+    // TODO(step 4: connection termination)
+    // CLOSE_WAIT STATE
+    // "Queue this request until all preceding SENDs have been
+    // segmentized; then send a FIN segment, enter LAST-ACK state."
+    UNIMPLEMENTED();
+    tcp->set_state(TCPState::LAST_ACK);
+  }
 }
 
 void tcp_close(int fd) {
