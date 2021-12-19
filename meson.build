@@ -162,6 +162,16 @@ test('test4b http request & response (server)',
     args: [root / 'src/test/test4b_http_server.py'],
     is_parallel : false)
 
+test('test5a connection termination (client)',
+    python3,
+    args: [root / 'src/test/test5a_termination_client.py'],
+    is_parallel : false)
+
+test('test5b connection termination (server)',
+    python3,
+    args: [root / 'src/test/test5b_termination_server.py'],
+    is_parallel : false)
+
 test('test6 visit baidu (client) (requires sudo)',
     sudo,
     args: ['python3', root / 'src/test/test6_visit_baidu.py'],
