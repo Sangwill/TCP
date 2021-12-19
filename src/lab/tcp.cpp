@@ -407,17 +407,30 @@ void process_tcp(const IPHeader *ip, const uint8_t *data, size_t size) {
             return;
           }
 
-          //  TODO(step 4: connection termination)
-          //  "If the FIN bit is set, signal the user "connection closing" and
-          //  return any pending RECEIVEs with same message, advance RCV.NXT
-          //  over the FIN, and send an acknowledgment for the FIN.  Note that
-          //  FIN implies PUSH for any segment text not yet delivered to the
-          //  user."
+          // TODO(step 4: connection termination)
+          // "If the FIN bit is set, signal the user "connection closing" and
+          // return any pending RECEIVEs with same message, advance RCV.NXT
+          // over the FIN, and send an acknowledgment for the FIN.  Note that
+          // FIN implies PUSH for any segment text not yet delivered to the
+          // user."
           UNIMPLEMENTED();
 
           if (tcp->state == SYN_RCVD || tcp->state == ESTABLISHED) {
             // Enter the CLOSE-WAIT state
             tcp->set_state(TCPState::CLOSE_WAIT);
+          } else if (tcp->state == FIN_WAIT_1) {
+            // FIN-WAIT-1 STATE
+            // "If our FIN has been ACKed (perhaps in this segment), then
+            // enter TIME-WAIT, start the time-wait timer, turn off the other
+            // timers; otherwise enter the CLOSING state."
+
+            tcp->set_state(TCPState::TIME_WAIT);
+          } else if (tcp->state == FIN_WAIT_2) {
+            // FIN-WAIT-2 STATE
+            // "Enter the TIME-WAIT state.  Start the time-wait timer, turn
+            // off the other timers."
+
+            tcp->set_state(TCPState::TIME_WAIT);
           }
         }
       }
