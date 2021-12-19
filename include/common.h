@@ -42,6 +42,10 @@ extern FILE *pcap_fp;
 extern double recv_drop_rate;
 extern double send_drop_rate;
 
+// configurable packet send delay in ms
+extern double send_delay_min;
+extern double send_delay_max;
+
 // configurable congestion control algorithm
 enum CongestionControlAlgorithm {
   Default,

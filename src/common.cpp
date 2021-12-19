@@ -46,6 +46,10 @@ const char *remote_ip = "";
 double recv_drop_rate = 0.0;
 double send_drop_rate = 0.0;
 
+// random delay in ms
+double send_delay_min = 0.0;
+double send_delay_max = 0.0;
+
 // default congestion control algorithm
 CongestionControlAlgorithm current_cc_algo =
     CongestionControlAlgorithm::Default;
@@ -118,7 +122,7 @@ void pcap_write(FILE *fp, const uint8_t *data, size_t size) {
   fflush(fp);
 }
 
-void send_packet(const uint8_t *data, size_t size) {
+void send_packet_internal(const uint8_t *data, size_t size) {
   printf("TX:");
   for (size_t i = 0; i < size; i++) {
     printf(" %02X", data[i]);
@@ -151,6 +155,27 @@ void send_packet(const uint8_t *data, size_t size) {
     }
 
     write(tun_fd, ptr, size);
+  }
+}
+
+struct delay_sender {
+  std::vector<uint8_t> data;
+
+  int operator()() { send_packet_internal(data.data(), data.size()); }
+};
+
+void send_packet(const uint8_t *data, size_t size) {
+  if (send_delay_max != 0.0) {
+    // simulate transfer latency
+    double time = send_delay_min + ((double)rand() / RAND_MAX) *
+                                       (send_delay_max - send_delay_min);
+    printf("Delay in %.2lf ms\n", time);
+
+    delay_sender fn;
+    fn.data.insert(fn.data.begin(), data, data + size);
+    TIMERS.schedule_job(fn, time);
+  } else {
+    send_packet_internal(data, size);
   }
 }
 
@@ -222,7 +247,7 @@ void parse_argv(int argc, char *argv[]) {
   char *tun = NULL;
 
   // parse arguments
-  while ((c = getopt(argc, argv, "hl:r:t:p:R:S:c:")) != -1) {
+  while ((c = getopt(argc, argv, "hl:r:t:p:R:S:c:s:")) != -1) {
     switch (c) {
     case 'h':
       hflag = 1;
@@ -250,6 +275,18 @@ void parse_argv(int argc, char *argv[]) {
     case 'c':
       set_congestion_control_algo(optarg);
       break;
+    case 's':
+      if (strchr(optarg, ',') != NULL) {
+        // min, max
+        sscanf(optarg, "%lf,%lf", &send_delay_min, &send_delay_max);
+        assert(send_delay_min <= send_delay_max);
+      } else {
+        // min = max
+        sscanf(optarg, "%lf", &send_delay_min);
+        send_delay_max = send_delay_min;
+      }
+      printf("Send delay is [%lf,%lf] ms\n", send_delay_min, send_delay_max);
+      break;
     case '?':
       fprintf(stderr, "Unknown option: %c\n", optopt);
       exit(1);
@@ -260,14 +297,21 @@ void parse_argv(int argc, char *argv[]) {
   }
 
   if (hflag) {
-    fprintf(stderr, "Usage: %s [-h] [-l LOCAL] [-r REMOTE] [-t TUN] [-p PCAP] [-R FLOAT] [-S FLOAT] [-c ALGO]\n", argv[0]);
+    fprintf(stderr,
+            "Usage: %s [-h] [-l LOCAL] [-r REMOTE] [-t TUN] [-p PCAP] [-R "
+            "FLOAT] [-S FLOAT] [-c ALGO] [-s DELAY[MIN,MAX]]\n",
+            argv[0]);
     fprintf(stderr, "\t-l LOCAL: local unix socket path\n");
     fprintf(stderr, "\t-r REMOTE: remote unix socket path\n");
     fprintf(stderr, "\t-t TUN: use tun interface\n");
     fprintf(stderr, "\t-p PCAP: pcap file for debugging\n");
     fprintf(stderr, "\t-R FLOAT: recv packet drop rate\n");
     fprintf(stderr, "\t-S FLOAT: send packet drop rate\n");
-    fprintf(stderr, "\t-c ALGO: congestion control algorithm: Default, NewReno, CUBIC, BBR\n");
+    fprintf(stderr, "\t-c ALGO: congestion control algorithm: Default, "
+                    "NewReno, CUBIC, BBR\n");
+    fprintf(
+        stderr,
+        "\t-s DELAY[MIN,MAX]: add random delay time(ms) in sending packets\n");
     exit(0);
   }
 
