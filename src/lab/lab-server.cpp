@@ -83,7 +83,7 @@ struct server_handler {
     }
 
     // next data
-    return 1000;
+    return 100;
   }
 };
 
@@ -108,7 +108,7 @@ int main(int argc, char *argv[]) {
     }
 
     // next accept
-    return 1000;
+    return 100;
   };
   TIMERS.schedule_job(accept_fn, 1000);
 
