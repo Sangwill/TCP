@@ -50,12 +50,13 @@ err_t httpc_headers_done(httpc_state_t *connection, void *arg, struct pbuf *hdr,
   return ERR_OK;
 }
 
+bool exiting = false;
 void httpc_result(void *arg, httpc_result_t httpc_result, u32_t rx_content_len,
                   u32_t srv_res, err_t err) {
   printf("Server Result: %d\n", srv_res);
   printf("Content Length: %d\n", rx_content_len);
   printf("Exiting\n");
-  exit(0);
+  exiting = true;
 }
 
 int main(int argc, char *argv[]) {
@@ -74,7 +75,7 @@ int main(int argc, char *argv[]) {
 
   const size_t buffer_size = 2048;
   u8_t buffer[buffer_size];
-  while (1) {
+  while (!exiting) {
     ssize_t size = recv_packet(buffer, buffer_size);
     if (size >= 0) {
       // got data
