@@ -261,15 +261,35 @@ void process_tcp(const IPHeader *ip, const uint8_t *data, size_t size) {
 
         // "fourth check the SYN bit"
         if (tcp_header->syn) {
-          // update variables
           // TODO(step 2: 3-way handshake)
+          // "RCV.NXT is set to SEG.SEQ+1, IRS is set to
+          // SEG.SEQ.  SND.UNA should be advanced to equal SEG.ACK (if there
+          // is an ACK), and any segments on the retransmission queue which
+          // are thereby acknowledged should be removed."
 
           if (tcp_seq_gt(tcp->snd_una, tcp->iss)) {
-            // "our SYN has been ACKed"
+            // "If SND.UNA > ISS (our SYN has been ACKed), change the connection
+            // state to ESTABLISHED,"
+
+            // TODO(step 2: 3-way handshake)
             // send ACK segment
+            // "form an ACK segment
+            // <SEQ=SND.NXT><ACK=RCV.NXT><CTL=ACK>
+            // and send it."
+
+            // TODO(step 2: 3-way handshake)
+            // https://www.rfc-editor.org/rfc/rfc1122#page-94
+            // "When the connection enters ESTABLISHED state, the following
+            // variables must be set:
+            // SND.WND <- SEG.WND
+            // SND.WL1 <- SEG.SEQ
+            // SND.WL2 <- SEG.ACK"
             UNIMPLEMENTED()
           } else {
             // "Otherwise enter SYN-RECEIVED"
+            // "form a SYN,ACK segment
+            //<SEQ=ISS><ACK=RCV.NXT><CTL=SYN,ACK>
+            // and send it."
             UNIMPLEMENTED()
           }
         }
