@@ -260,7 +260,7 @@ void parse_argv(int argc, char *argv[]) {
   }
 
   if (hflag) {
-    fprintf(stderr, "Usage: %s [-h] [-l LOCAL] [-r REMOTE]\n", argv[0]);
+    fprintf(stderr, "Usage: %s [-h] [-l LOCAL] [-r REMOTE] [-t TUN] [-p PCAP] [-R FLOAT] [-S FLOAT] [-c ALGO]\n", argv[0]);
     fprintf(stderr, "\t-l LOCAL: local unix socket path\n");
     fprintf(stderr, "\t-r REMOTE: remote unix socket path\n");
     fprintf(stderr, "\t-t TUN: use tun interface\n");
@@ -293,6 +293,7 @@ void parse_argv(int argc, char *argv[]) {
   }
 
   if (pcap) {
+    printf("Saving packets to %s\n", pcap);
     pcap_fp = pcap_create(pcap);
   }
 
