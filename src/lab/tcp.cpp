@@ -47,6 +47,7 @@ void TCP::set_state(TCPState new_state) {
   state = new_state;
 }
 
+// construct ip header from tcp connection
 void construct_ip_header(uint8_t *buffer, const TCP *tcp,
                          uint16_t total_length) {
   IPHeader *ip_hdr = (IPHeader *)buffer;
@@ -60,6 +61,7 @@ void construct_ip_header(uint8_t *buffer, const TCP *tcp,
   ip_hdr->ip_dst = tcp->remote_ip;
 }
 
+// update tcp & ip checksum
 void update_tcp_ip_checksum(uint8_t *buffer) {
   IPHeader *ip_hdr = (IPHeader *)buffer;
   TCPHeader *tcp_hdr = (TCPHeader *)(buffer + ip_hdr->ip_hl * 4);
@@ -68,13 +70,13 @@ void update_tcp_ip_checksum(uint8_t *buffer) {
 }
 
 uint32_t generate_initial_seq() {
+  // TODO(step 1: sequence number comparison and generation)
   // initial sequence number based on timestamp
   // rfc793 page 27 or rfc6528
   // https://www.rfc-editor.org/rfc/rfc793.html#page-27
   // "The generator is bound to a (possibly fictitious) 32
   // bit clock whose low order bit is incremented roughly every 4
   // microseconds."
-  // TODO(step 1: sequence number comparison and generation)
   UNIMPLEMENTED()
   return 0;
 }
@@ -244,6 +246,10 @@ void process_tcp(const IPHeader *ip, const uint8_t *data, size_t size) {
         // "If the state is SYN-SENT then"
         // "If the ACK bit is set"
         if (tcp_header->ack) {
+          // "If SEG.ACK =< ISS, or SEG.ACK > SND.NXT, send a reset (unless
+          // the RST bit is set, if so drop the segment and return)
+          //<SEQ=SEG.ACK><CTL=RST>
+          // and discard the segment.  Return."
           if (tcp_seq_le(seg_ack, tcp->iss) ||
               tcp_seq_gt(seg_ack, tcp->snd_nxt)) {
             // send a reset when !RST
@@ -253,7 +259,12 @@ void process_tcp(const IPHeader *ip, const uint8_t *data, size_t size) {
         }
 
         // "second check the RST bit"
+        // "If the RST bit is set"
         if (tcp_header->rst) {
+          // "If the ACK was acceptable then signal the user "error:
+          // connection reset", drop the segment, enter CLOSED state,
+          // delete TCB, and return.  Otherwise (no ACK) drop the segment
+          // and return."
           printf("Connection reset\n");
           tcp->set_state(TCPState::CLOSED);
           return;
@@ -266,16 +277,18 @@ void process_tcp(const IPHeader *ip, const uint8_t *data, size_t size) {
           // SEG.SEQ.  SND.UNA should be advanced to equal SEG.ACK (if there
           // is an ACK), and any segments on the retransmission queue which
           // are thereby acknowledged should be removed."
+          UNIMPLEMENTED()
 
           if (tcp_seq_gt(tcp->snd_una, tcp->iss)) {
             // "If SND.UNA > ISS (our SYN has been ACKed), change the connection
             // state to ESTABLISHED,"
+            tcp->set_state(TCPState::ESTABLISHED);
 
             // TODO(step 2: 3-way handshake)
-            // send ACK segment
             // "form an ACK segment
             // <SEQ=SND.NXT><ACK=RCV.NXT><CTL=ACK>
             // and send it."
+            UNIMPLEMENTED()
 
             // TODO(step 2: 3-way handshake)
             // https://www.rfc-editor.org/rfc/rfc1122#page-94
@@ -315,34 +328,37 @@ void process_tcp(const IPHeader *ip, const uint8_t *data, size_t size) {
 
         // "first check sequence number"
 
+        // TODO(step 3: send & receive)
         // "There are four cases for the acceptability test for an incoming
         // segment:"
-        bool acceptability = false;
+        bool acceptable = false;
         UNIMPLEMENTED()
 
         // "If an incoming segment is not acceptable, an acknowledgment
         // should be sent in reply (unless the RST bit is set, if so drop
         // the segment and return):"
+        if (!acceptable) {
+          UNIMPLEMENTED();
+        }
 
         // "second check the RST bit,"
+        if (tcp_header->rst) {
+        }
 
         // "fourth, check the SYN bit,"
+        if (tcp_header->syn) {
+        }
 
         // "fifth check the ACK field,"
         if (tcp_header->ack) {
-          // SYN-RECEIVED STATE
+          // "SYN-RECEIVED STATE"
           if (tcp->state == SYN_RCVD) {
-            // If SND.UNA =< SEG.ACK =< SND.NXT then enter ESTABLISHED state
-            // and continue processing.
+            // "If SND.UNA =< SEG.ACK =< SND.NXT then enter ESTABLISHED state
+            // and continue processing."
             if (tcp_seq_le(tcp->snd_una, seg_ack) &&
                 tcp_seq_le(seg_ack, tcp->snd_nxt)) {
               tcp->set_state(TCPState::ESTABLISHED);
             }
-
-            // If the segment acknowledgment is not acceptable, form a
-            // reset segment,
-            //<SEQ=SEG.ACK><CTL=RST>
-            // and send it.
           }
 
           // ESTABLISHED STATE
@@ -368,6 +384,10 @@ void process_tcp(const IPHeader *ip, const uint8_t *data, size_t size) {
 
             // TODO(step 3: send & receive)
             // write to recv buffer
+            // "Once the TCP takes responsibility for the data it advances
+            // RCV.NXT over the data accepted, and adjusts RCV.WND as
+            // appropriate to the current buffer availability.  The total of
+            // RCV.NXT and RCV.WND should not be reduced."
             tcp->rcv_nxt += seg_len;
 
             // "Send an acknowledgment of the form:
@@ -378,19 +398,24 @@ void process_tcp(const IPHeader *ip, const uint8_t *data, size_t size) {
 
         // "eighth, check the FIN bit,"
         if (tcp_header->fin) {
-          // TODO(step 4: connection termination)
-          // "If the FIN bit is set, signal the user "connection closing" and
-          // return any pending RECEIVEs with same message, advance RCV.NXT
-          // over the FIN, and send an acknowledgment for the FIN.  Note that
-          // FIN implies PUSH for any segment text not yet delivered to the
-          // user."
-          if (tcp->state == SYN_RCVD || tcp->state == ESTABLISHED) {
-            // advance RCV.NXT
-            // over the FIN, and send an acknowledgment for the FIN.
-            tcp->rcv_nxt++;
+          // "Do not process the FIN if the state is CLOSED, LISTEN or SYN-SENT
+          // since the SEG.SEQ cannot be validated; drop the segment and
+          // return."
+          if (tcp->state == CLOSED || tcp->state == LISTEN ||
+              tcp->state == SYN_SENT) {
+            return;
+          }
 
-            // send ACK segment
-            UNIMPLEMENTED()
+          //  TODO(step 4: connection termination)
+          //  "If the FIN bit is set, signal the user "connection closing" and
+          //  return any pending RECEIVEs with same message, advance RCV.NXT
+          //  over the FIN, and send an acknowledgment for the FIN.  Note that
+          //  FIN implies PUSH for any segment text not yet delivered to the
+          //  user."
+
+          if (tcp->state == SYN_RCVD || tcp->state == ESTABLISHED) {
+            // Enter the CLOSE-WAIT state
+            tcp->set_state(TCPState::CLOSE_WAIT);
           }
         }
       }
