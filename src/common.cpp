@@ -1,3 +1,4 @@
+#include <assert.h>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -7,7 +8,6 @@
 #include <sys/un.h>
 #include <time.h>
 #include <unistd.h>
-#include <assert.h>
 
 #ifdef __APPLE__
 
@@ -162,7 +162,10 @@ void send_packet_internal(const uint8_t *data, size_t size) {
 struct delay_sender {
   std::vector<uint8_t> data;
 
-  int operator()() { send_packet_internal(data.data(), data.size()); }
+  int operator()() {
+    send_packet_internal(data.data(), data.size());
+    return -1;
+  }
 };
 
 void send_packet(const uint8_t *data, size_t size) {
