@@ -5,7 +5,7 @@ from common import kill, spawn_lab_server, spawn_lwip_client, quit
 # spawn lab-server and lwip-client
 # check the tcp state machine
 
-prefix = '3way_handshake_server'
+prefix = 'termination_server'
 
 kill()
 
@@ -21,12 +21,12 @@ client_stdout = f'{prefix}_lwip-client-stdout.log'
 server_stdout = f'{prefix}_lab-server-stdout.log'
 for i in range(timeout):
     print('Reading output:')
-    client_established = False
+    client_closed = False
     with open(client_stdout, 'r') as f:
         for line in f:
             line = line.strip()
-            if 'State: ESTABLISHED' in line:
-                client_established = True
+            if 'tcp_receive: received FIN.' in line:
+                client_closed = True
                 print('lwip-client:', line)
 
     transitions = []
@@ -41,11 +41,14 @@ for i in range(timeout):
                 print('lab-server:', line)
 
     # check state machine
-    if client_established:
-        for old, new in transitions:
-            if old == 'SYN_RCVD' and new == 'ESTABLISHED':
-                print('Passed')
-                quit(0)
+    if len(transitions) >= 5 and client_closed:
+        assert(transitions[0] == ('CLOSED', 'LISTEN'))
+        assert(transitions[1] == ('CLOSED', 'SYN_RCVD'))
+        assert(transitions[2] == ('SYN_RCVD', 'ESTABLISHED'))
+        assert(transitions[3] == ('ESTABLISHED', 'FIN_WAIT_1'))
+        assert(transitions[4] == ('FIN_WAIT_1', 'FIN_WAIT_2'))
+        print('Passed')
+        quit(0)
     time.sleep(1)
 
 print('Timeout')

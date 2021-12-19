@@ -162,7 +162,7 @@ test('test4b http request & response (server)',
     args: [root / 'src/test/test4b_http_server.py'],
     is_parallel : false)
 
-test('test5 visit baidu (client) (requires sudo)',
+test('test6 visit baidu (client) (requires sudo)',
     sudo,
-    args: ['python3', root / 'src/test/test5_visit_baidu.py'],
+    args: ['python3', root / 'src/test/test6_visit_baidu.py'],
     is_parallel : false)
