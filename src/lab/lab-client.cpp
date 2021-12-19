@@ -116,62 +116,9 @@ int main(int argc, char *argv[]) {
   char *pwd = getenv("PWD");
   printf("Writing http response body to %s/index.html\n", pwd);
 
-  bool http_response_header_done = false;
-  std::vector<uint8_t> read_http_response;
-
-  timer_fn read_fn = [&] {
-    char buffer[1024];
-    ssize_t res = tcp_read(tcp_fd, (uint8_t *)buffer, sizeof(buffer) - 1);
-    if (res > 0) {
-      printf("Read '");
-      fwrite(buffer, 1, res, stdout);
-      printf("' from tcp\n");
-
-      if (http_response_header_done) {
-        // directly write to file
-        fwrite(buffer, 1, res, fp);
-      } else {
-        read_http_response.insert(read_http_response.end(), &buffer[0],
-                                  &buffer[res]);
-        // find consecutive \r\n\r\n
-        for (size_t i = 0; i + 3 < read_http_response.size(); i++) {
-          if (read_http_response[i] == '\r' &&
-              read_http_response[i + 1] == '\n' &&
-              read_http_response[i + 2] == '\r' &&
-              read_http_response[i + 3] == '\n') {
-            std::string resp((char *)read_http_response.data(),
-                             read_http_response.size());
-
-            // find content length
-            std::string content_length = "Content-Length: ";
-            size_t pos = resp.find(content_length);
-            assert(pos != std::string::npos);
-            int length = -1;
-            sscanf(&resp[pos + content_length.length()], "%d", &length);
-            printf("Content Length is %d\n", length);
-            assert(length >= 0);
-
-            // check if body is long enough
-            int size = read_http_response.size() - i - 4;
-            if (size >= length) {
-              http_response_header_done = true;
-              fwrite(&read_http_response[i + 4], 1, size, fp);
-
-              close_and_exit fn;
-              fn.fd = tcp_fd;
-              TIMERS.schedule_job(fn, 0);
-            }
-
-            break;
-          }
-        }
-      }
-      fflush(fp);
-    }
-
-    // next data
-    return 100;
-  };
+  read_http_response read_fn;
+  read_fn.fd = tcp_fd;
+  read_fn.fp = fp;
   TIMERS.schedule_job(read_fn, 1000);
 
   // write HTTP request line by line every 1s
