@@ -7,6 +7,7 @@
 #include <sys/un.h>
 #include <time.h>
 #include <unistd.h>
+#include <assert.h>
 
 #ifdef __APPLE__
 
