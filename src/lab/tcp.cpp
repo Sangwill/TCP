@@ -671,7 +671,7 @@ void tcp_connect(int fd, uint32_t dst_addr, uint16_t dst_port) {
   // TODO(step 3: send & receive)
   // window size: size of empty bytes in recv buffer
   tcp_hdr->window = 0;
-  UNIMPLEMENTED();
+  UNIMPLEMENTED_WARN();
 
   // mss option, rfc793 page 18
   // https://www.rfc-editor.org/rfc/rfc793.html#page-18

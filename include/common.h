@@ -22,6 +22,11 @@
     exit(1);                                                                   \
   } while (0);
 
+#define UNIMPLEMENTED_WARN()                                                   \
+  do {                                                                         \
+    printf("WARN: UNIMPLEMENTED at %s:%d\n", __FILE__, __LINE__);              \
+  } while (0);
+
 // useful types to mark endianness
 // conversion between be{32,16}_t and other must use htons or ntohs
 typedef uint32_t be32_t;
