@@ -18,13 +18,13 @@
 // helper macros
 #define UNIMPLEMENTED()                                                        \
   do {                                                                         \
-    printf("UNIMPLEMENTED at %s:%d\n", __FILE__, __LINE__);                    \
+    printf(RED "UNIMPLEMENTED at %s:%d\n" RESET, __FILE__, __LINE__);                    \
     exit(1);                                                                   \
   } while (0);
 
 #define UNIMPLEMENTED_WARN()                                                   \
   do {                                                                         \
-    printf("WARN: UNIMPLEMENTED at %s:%d\n", __FILE__, __LINE__);              \
+    printf(YEL "WARN: UNIMPLEMENTED at %s:%d\n" RESET, __FILE__, __LINE__);              \
   } while (0);
 
 // useful types to mark endianness
