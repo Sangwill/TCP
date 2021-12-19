@@ -328,7 +328,6 @@ void process_tcp(const IPHeader *ip, const uint8_t *data, size_t size) {
 
         // "first check sequence number"
 
-        // TODO(step 3: send & receive)
         // "There are four cases for the acceptability test for an incoming
         // segment:"
         bool acceptable = false;
@@ -705,8 +704,9 @@ ssize_t tcp_write(int fd, const uint8_t *data, size_t size) {
     // TODO(step 3: send & receive)
     // consider mss and send sequence space
     // compute the segment length to send
-    UNIMPLEMENTED()
     size_t segment_len = 0;
+    UNIMPLEMENTED()
+
     if (segment_len > 0) {
       printf("Sending segment of len %zu to remote\n", segment_len);
       // send data now
