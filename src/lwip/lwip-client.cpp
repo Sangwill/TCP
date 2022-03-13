@@ -79,7 +79,7 @@ int main(int argc, char *argv[]) {
     ssize_t size = recv_packet(buffer, buffer_size);
     if (size >= 0) {
       // got data
-      struct pbuf *p = pbuf_alloc(PBUF_RAW, size, PBUF_RAM);
+      struct pbuf *p = pbuf_alloc(PBUF_RAW, size, PBUF_POOL);
       memcpy(p->payload, buffer, size);
 
       if (netif.input(p, &netif) != ERR_OK) {
