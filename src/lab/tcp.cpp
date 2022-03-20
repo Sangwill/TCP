@@ -729,6 +729,9 @@ ssize_t tcp_write(int fd, const uint8_t *data, size_t size) {
       tcp_hdr->doff = 20 / 4; // 20 bytes
 
       // TODO(step 3: send & receive)
+      // set ack bit and ack_seq
+
+      // TODO(step 3: send & receive)
       // window size: size of empty bytes in recv buffer
       tcp_hdr->window = 0;
       UNIMPLEMENTED();
