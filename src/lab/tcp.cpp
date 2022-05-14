@@ -725,6 +725,7 @@ ssize_t tcp_write(int fd, const uint8_t *data, size_t size) {
 
     // TODO(step 3: send & receive)
     // consider mss and send sequence space
+    // send sequence space: https://www.rfc-editor.org/rfc/rfc793.html#page-20 figure 4
     // compute the segment length to send
     size_t segment_len = 0;
     UNIMPLEMENTED()
