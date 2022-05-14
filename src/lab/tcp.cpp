@@ -383,7 +383,7 @@ void process_tcp(const IPHeader *ip, const uint8_t *data, size_t size) {
           }
 
           // "FIN-WAIT-2 STATE"
-          if (tcp->state == FIN_WAIT_1) {
+          if (tcp->state == FIN_WAIT_2) {
             // "In addition to the processing for the ESTABLISHED state, if
             // the retransmission queue is empty, the user's CLOSE can be
             // acknowledged ("ok") but do not delete the TCB."
