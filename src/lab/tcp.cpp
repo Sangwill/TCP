@@ -350,6 +350,7 @@ void process_tcp(const IPHeader *ip, const uint8_t *data, size_t size) {
 
         // "fifth check the ACK field,"
         if (tcp_header->ack) {
+          // "if the ACK bit is on"
           // "SYN-RECEIVED STATE"
           if (tcp->state == SYN_RCVD) {
             // "If SND.UNA =< SEG.ACK =< SND.NXT then enter ESTABLISHED state
@@ -360,7 +361,7 @@ void process_tcp(const IPHeader *ip, const uint8_t *data, size_t size) {
             }
           }
 
-          // ESTABLISHED STATE
+          // "ESTABLISHED STATE"
           if (tcp->state == ESTABLISHED) {
             // TODO(step 3: send & receive)
             // "If SND.UNA < SEG.ACK =< SND.NXT then, set SND.UNA <- SEG.ACK."
@@ -372,6 +373,27 @@ void process_tcp(const IPHeader *ip, const uint8_t *data, size_t size) {
             // SND.WL2 =< SEG.ACK)), set SND.WND <- SEG.WND, set
             // SND.WL1 <- SEG.SEQ, and set SND.WL2 <- SEG.ACK."
             UNIMPLEMENTED()
+          }
+
+          // "FIN-WAIT-1 STATE"
+          if (tcp->state == FIN_WAIT_1) {
+            // "In addition to the processing for the ESTABLISHED state, if
+            // our FIN is now acknowledged then enter FIN-WAIT-2 and continue
+            // processing in that state."
+          }
+
+          // "FIN-WAIT-2 STATE"
+          if (tcp->state == FIN_WAIT_1) {
+            // "In addition to the processing for the ESTABLISHED state, if
+            // the retransmission queue is empty, the user's CLOSE can be
+            // acknowledged ("ok") but do not delete the TCB."
+          }
+
+          // LAST-ACK STATE
+          if (tcp->state == LAST_ACK) {
+            // "The only thing that can arrive in this state is an
+            // acknowledgment of our FIN.  If our FIN is now acknowledged,
+            // delete the TCB, enter the CLOSED state, and return."
           }
         }
 
