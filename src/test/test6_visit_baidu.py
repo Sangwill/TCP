@@ -22,12 +22,13 @@ atexit.register(kill_callback, socat)
 
 spawn_lab_client_tun(prefix)
 
-timeout = 10
+# timeout = 10
+from common import timeout
 client_stdout = f'{prefix}_lab-client-tun-stdout.log'
 for i in range(timeout):
     print('Reading output:')
     recv_baidu = False
-    with open(client_stdout, 'r') as f:
+    with open(client_stdout, 'r', errors='ignore') as f:
         for line in f:
             line = line.strip()
             if 'www.baidu.com' in line:

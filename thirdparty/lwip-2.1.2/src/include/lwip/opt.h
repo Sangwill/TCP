@@ -1289,6 +1289,7 @@
  * when opening a connection. For the transmit size, this MSS sets
  * an upper limit on the MSS advertised by the remote host.
  */
+#define TCP_MSS                         1460
 #if !defined TCP_MSS || defined __DOXYGEN__
 #define TCP_MSS                         536
 #endif

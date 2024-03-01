@@ -18,17 +18,10 @@ struct write_response {
   int fd;
   int index = 0;
   size_t offset = 0;
-  const char *data[5] = {
-      "HTTP/1.1 200 OK\r\n",
-      "Content-Length: 13\r\n",
-      "Content-Type: text/plain; charset=utf-8\r\n",
-      "\r\n",
-      "Hello World!\n",
-  };
 
   size_t operator()() {
-    // write HTTP request line by line every 1s
-    const char *p = data[index];
+    // write HTTP request line by line immediately
+    const char *p = http_index[index].c_str();
     size_t len = strlen(p);
     ssize_t res = tcp_write(fd, (const uint8_t *)p + offset, len - offset);
     if (res > 0) {
@@ -43,8 +36,8 @@ struct write_response {
     }
 
     // next data
-    if (index < 5) {
-      return 100;
+    if (index < http_index.size()) {
+      return 1;
     } else {
       // done, closing
       printf("Closing socket %d\n", fd);
@@ -76,7 +69,7 @@ struct server_handler {
           // send response
           write_response write_fn;
           write_fn.fd = new_fd;
-          TIMERS.schedule_job(write_fn, 1000);
+          TIMERS.schedule_job(write_fn, 0);
           return 0;
         }
       }
@@ -104,7 +97,7 @@ int main(int argc, char *argv[]) {
       server_handler server_fn;
       server_fn.new_fd = new_fd;
 
-      TIMERS.schedule_job(server_fn, 1000);
+      TIMERS.schedule_job(server_fn, 0);
     }
 
     // next accept

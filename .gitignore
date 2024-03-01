@@ -1,8 +1,10 @@
 *.o
 *.pcap
 *.html
+c
+s
 
-__pycache__/
+**/__pycache__
 builddir/
 .vscode/
 .idea/

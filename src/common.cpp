@@ -8,6 +8,7 @@
 #include <sys/un.h>
 #include <time.h>
 #include <unistd.h>
+#include <algorithm>
 
 #ifdef __APPLE__
 
@@ -27,6 +28,7 @@
 #include "common.h"
 #include "ip.h"
 #include "timers.h"
+#include "tcp_header.h"
 
 // global state
 struct sockaddr_un remote_addr;
@@ -50,6 +52,8 @@ double send_drop_rate = 0.0;
 // random delay in ms
 double send_delay_min = 0.0;
 double send_delay_max = 0.0;
+
+std::vector<std::string> http_index;
 
 // default congestion control algorithm
 CongestionControlAlgorithm current_cc_algo =
@@ -123,18 +127,35 @@ void pcap_write(FILE *fp, const uint8_t *data, size_t size) {
   fflush(fp);
 }
 
+#include <map>
+
+// send packet drop control
+#define MIN_DROP_TIMES 1
+#define MAX_DROP_TIMES 3
+std::map<uint32_t, uint32_t> packet_drop_count;
+
 void send_packet_internal(const uint8_t *data, size_t size) {
   printf("TX:");
   for (size_t i = 0; i < size; i++) {
     printf(" %02X", data[i]);
   }
   printf("\n");
-
-  if ((double)rand() / RAND_MAX < send_drop_rate) {
-    printf("Send packet dropped\n");
-    return;
+  if (send_drop_rate) {
+    // drop packet at least MIN_DROP_TIMES
+    uint32_t seq = ntohl(((TCPHeader*)(data + 20))->seq);
+    // simply regard seq as the identifier of a packet
+    if (packet_drop_count[seq] < MIN_DROP_TIMES) {
+      packet_drop_count[seq]++;
+      printf("Send packet dropped\n");
+      return;
+    }
+    // drop packet at most MAX_DROP_TIMES with probability send_drop_rate
+    if (packet_drop_count[seq] < MAX_DROP_TIMES && (double)rand() / RAND_MAX < send_drop_rate) {
+      packet_drop_count[seq]++;
+      printf("Send packet dropped\n");
+      return;
+    }
   }
-
   // save to pcap
   if (pcap_fp) {
     pcap_write(pcap_fp, data, size);
@@ -142,8 +163,8 @@ void send_packet_internal(const uint8_t *data, size_t size) {
 
   // send to remote
   if (io_config == UnixSocket) {
-    sendto(socket_fd, data, size, 0, (struct sockaddr *)&remote_addr,
-           sizeof(remote_addr));
+    while(sendto(socket_fd, data, size, 0, (struct sockaddr *)&remote_addr,
+           sizeof(remote_addr)) < 0);
   } else {
     // prepend padding if needed
     const uint8_t *ptr = data;
@@ -168,11 +189,30 @@ struct delay_sender {
   }
 };
 
+const int DELAY_SLOT_COUNT = 10;
+double delay_slots[DELAY_SLOT_COUNT] = {0};
+
+void update_delay_slots() {
+  for (int i = 0; i < DELAY_SLOT_COUNT; i++) {
+    delay_slots[i] = send_delay_min + ((double)rand() / RAND_MAX) *
+                                          (send_delay_max - send_delay_min);
+  }
+  std::sort(delay_slots, delay_slots + DELAY_SLOT_COUNT, std::greater<double>());
+}
+
+double get_delay_slot() {
+  static int index = DELAY_SLOT_COUNT;
+  if (index == DELAY_SLOT_COUNT) {
+    index = 0;
+    update_delay_slots();
+  }
+  return delay_slots[index++];
+}
+
 void send_packet(const uint8_t *data, size_t size) {
   if (send_delay_max != 0.0) {
     // simulate transfer latency
-    double time = send_delay_min + ((double)rand() / RAND_MAX) *
-                                       (send_delay_max - send_delay_min);
+    double time = get_delay_slot();
     printf("Delay in %.2lf ms\n", time);
 
     delay_sender fn;
@@ -183,7 +223,21 @@ void send_packet(const uint8_t *data, size_t size) {
   }
 }
 
+
+// send packet throughput control
+#define MAX_TPS (10 * 1024)
+
+enum TPSControlMode {
+  None,
+  Fixed,
+  Random,
+  Continue,
+};
+TPSControlMode tps_control_mode = TPSControlMode::None;
+
 ssize_t recv_packet(uint8_t *buffer, size_t buffer_size) {
+  static int bytes_recv = 0;
+  static uint64_t first_packet_time = current_ts_msec();
   ssize_t size = 0;
   if (io_config == IOConfig::UnixSocket) {
     struct sockaddr_un addr = {};
@@ -205,6 +259,50 @@ ssize_t recv_packet(uint8_t *buffer, size_t buffer_size) {
   }
 
   if (size >= 0) {
+    uint64_t now = current_ts_msec();
+    // tps_control_handle() returns true if the packet should be dropped
+    // otherwise, the packet should be passed
+    static auto tps_control_handle = [&]() {
+      switch (tps_control_mode) {
+        case TPSControlMode::Fixed:
+          // drop packet if the throughput is higher than MAX_TPS
+          return (bytes_recv + size) * 1000 > (now - first_packet_time) * MAX_TPS;
+        case TPSControlMode::Random:
+          // drop packet with probability 0.1 if the throughput is higher than MAX_TPS
+          return (bytes_recv + size) * 1000 > (now - first_packet_time) * MAX_TPS &&
+                 (double)rand() / RAND_MAX < 0.1;
+        case TPSControlMode::Continue: {
+          // drop 3 packets for every 20 packets passed
+          static size_t drop_count = 3;
+          static size_t pass_count = 0;
+          if (size > 1000) {
+            // only count packets larger than 1000 bytes
+            if (pass_count) {
+              pass_count--;
+              return false;
+            } else {
+              if (drop_count) {
+                drop_count--;
+                return true;
+              } else {
+                // reset drop_count and pass_count
+                drop_count = 3;
+                pass_count = 20;
+                return false;
+              }
+            }
+          }
+          return false;
+        }
+        default:
+          return false;
+      }
+    };
+    if (tps_control_handle()) {
+      printf("Recv packet dropped for throughput control at time %lu ms\n", now - first_packet_time);
+      return -1;
+    }
+    bytes_recv += size;
     // print
     printf("RX:");
     for (ssize_t i = 0; i < size; i++) {
@@ -212,9 +310,20 @@ ssize_t recv_packet(uint8_t *buffer, size_t buffer_size) {
     }
     printf("\n");
 
-    if ((double)rand() / RAND_MAX < recv_drop_rate) {
-      printf("Recv packet dropped\n");
-      return -1;
+    if (recv_drop_rate) {
+      // drop packet at least MIN_DROP_TIMES
+      uint32_t seq = ntohl(((TCPHeader*)(buffer + 20))->seq);
+      if (packet_drop_count[seq] < MIN_DROP_TIMES) {
+        packet_drop_count[seq]++;
+        printf("Recv packet dropped\n");
+        return -1;
+      }
+
+      if (packet_drop_count[seq] < MAX_DROP_TIMES && (double)rand() / RAND_MAX < recv_drop_rate) {
+        packet_drop_count[seq]++;
+        printf("Recv packet dropped, drop times %d\n", packet_drop_count[seq]);
+        return -1;
+      }
     }
 
     // pcap
@@ -242,6 +351,67 @@ void set_congestion_control_algo(const char *algo) {
   }
 }
 
+void generate_http_index(const char *test_case=nullptr) {
+  static const char *index_data[5] = {
+    "HTTP/1.1 200 OK\r\n",
+    "Content-Length: 13\r\n",
+    "Content-Type: text/plain; charset=utf-8\r\n",
+    "\r\n",
+    "Hello World!\n",
+  };
+  http_index.clear();
+  auto hello_world_multi_lines = [&](int times) {
+    for (int i = 0; i < 4; i++) {
+      http_index.push_back(std::string(index_data[i]));
+    }
+    http_index[1] = std::string("Content-Length: ") + std::to_string(times * 13) + std::string("\r\n");
+    for (int i = 0; i < times; i++) {
+      http_index.push_back(std::string(index_data[4]));
+    }
+  };
+  auto hello_world_one_line = [&](int times) {
+    for (int i = 0; i < 4; i++) {
+      http_index.push_back(std::string(index_data[i]));
+    }
+    http_index[1] = std::string("Content-Length: ") + std::to_string(times * 13) + std::string("\r\n");
+    // repeat hello world for times
+    std::string one_line = "";
+    for (int i = 0; i < times; i++) {
+      one_line += std::string(index_data[4]);
+    }
+    http_index.push_back(one_line);
+  };
+  if (!test_case) {
+    hello_world_multi_lines(1);
+    return;
+  }
+  if (strcmp(test_case, "nagle") == 0) {
+    hello_world_multi_lines(100);
+    return;
+  }
+  if (strcmp(test_case, "out-of-order") == 0) {
+    hello_world_multi_lines(5);
+    return;
+  }
+  if (strcmp(test_case, "cong-avoid-client") == 0) {
+    tps_control_mode = TPSControlMode::Fixed;
+    return;
+  }
+  if (strcmp(test_case, "cong-avoid-client-2") == 0) {
+    tps_control_mode = TPSControlMode::Random;
+    return;
+  }
+  if (strcmp(test_case, "new-reno") == 0) {
+    tps_control_mode = TPSControlMode::Continue;
+    return;
+  }
+  if (strcmp(test_case, "cong-avoid-server") == 0) {
+    hello_world_one_line(10000);
+    return;
+  }
+  throw std::runtime_error("Unknown test case");
+}
+
 void parse_argv(int argc, char *argv[]) {
   int c;
   int hflag = 0;
@@ -249,9 +419,10 @@ void parse_argv(int argc, char *argv[]) {
   char *remote = NULL;
   char *pcap = NULL;
   char *tun = NULL;
+  srand(time(NULL));
 
   // parse arguments
-  while ((c = getopt(argc, argv, "hl:r:t:p:R:S:c:s:")) != -1) {
+  while ((c = getopt(argc, argv, "hl:r:t:p:R:S:c:s:T:")) != -1) {
     switch (c) {
     case 'h':
       hflag = 1;
@@ -270,7 +441,7 @@ void parse_argv(int argc, char *argv[]) {
       break;
     case 'R':
       sscanf(optarg, "%lf", &recv_drop_rate);
-      printf("Rend drop rate is now %lf\n", recv_drop_rate);
+      printf("Recv drop rate is now %lf\n", recv_drop_rate);
       break;
     case 'S':
       sscanf(optarg, "%lf", &send_drop_rate);
@@ -291,6 +462,9 @@ void parse_argv(int argc, char *argv[]) {
       }
       printf("Send delay is [%lf,%lf] ms\n", send_delay_min, send_delay_max);
       break;
+    case 'T':
+      generate_http_index(optarg);
+      break;
     case '?':
       fprintf(stderr, "Unknown option: %c\n", optopt);
       exit(1);
@@ -300,10 +474,14 @@ void parse_argv(int argc, char *argv[]) {
     }
   }
 
+  if (!http_index.size()) {
+    generate_http_index();
+  }
+
   if (hflag) {
     fprintf(stderr,
             "Usage: %s [-h] [-l LOCAL] [-r REMOTE] [-t TUN] [-p PCAP] [-R "
-            "FLOAT] [-S FLOAT] [-c ALGO] [-s DELAY[MIN,MAX]]\n",
+            "FLOAT] [-S FLOAT] [-c ALGO] [-s DELAY[MIN,MAX]] [-T TEST_CASE]\n",
             argv[0]);
     fprintf(stderr, "\t-l LOCAL: local unix socket path\n");
     fprintf(stderr, "\t-r REMOTE: remote unix socket path\n");
@@ -316,6 +494,9 @@ void parse_argv(int argc, char *argv[]) {
     fprintf(
         stderr,
         "\t-s DELAY[MIN,MAX]: add random delay time(ms) in sending packets\n");
+    fprintf(stderr, "\t-T TEST_CASE: test case: nagle, out-of-order, "
+                    "cong-avoid-client, cong-avoid-client-2, cong-avoid-server, "
+                    "new-reno\n");
     exit(0);
   }
 

@@ -31,6 +31,9 @@ err_t httpc_recv(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err) {
   fwrite(buffer, p->tot_len, 1, stdout);
 
   free(buffer);
+  // inform tcp that we have taken the data
+  altcp_recved(tpcb, p->tot_len);
+  pbuf_free(p);
   return ERR_OK;
 }
 
@@ -44,7 +47,7 @@ err_t httpc_headers_done(httpc_state_t *connection, void *arg, struct pbuf *hdr,
   fwrite(buffer, hdr->tot_len, 1, stdout);
 
   printf("Header Length: %d\n", hdr_len);
-  printf("Content Length: %d\n", hdr_len);
+  printf("Content Length: %d\n", content_len);
 
   free(buffer);
   return ERR_OK;
@@ -89,6 +92,13 @@ int main(int argc, char *argv[]) {
     fflush(stdout);
     sys_check_timeouts();
     loop_yield();
+  }
+  // wait for lwip to finish
+  while (sys_timeouts_sleeptime() != SYS_TIMEOUTS_SLEEPTIME_INFINITE) {
+    sys_check_timeouts();
+    loop_yield();
+    printf("Waiting for lwip to finish\n");
+    fflush(stdout);
   }
   return 0;
 }

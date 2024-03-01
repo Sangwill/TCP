@@ -1,11 +1,15 @@
 test:
+  tags: 
+    - default_runner
   image: jiegec/tcp-lab-x86_64
   script:
     # DO NOT EDIT!
+    - pip3 install dpkt
     - make
     - make test || true
   artifacts:
     paths:
       - builddir/*.log
+      - builddir/meson-logs/testlog.txt
     when: always
     expire_in: 1 year
