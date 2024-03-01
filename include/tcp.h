@@ -3,51 +3,14 @@
 
 #include "common.h"
 #include "ip.h"
+#include "tcp_header.h"
+#include "buffer.h"
 #include <map>
 #include <queue>
 #include <stdint.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <vector>
-
-// default MSS is MTU - 20 - 20 for TCP over IPv4
-#define DEFAULT_MSS (MTU - 20 - 20)
-
-// taken from linux source include/uapi/linux/tcp.h
-// RFC793 Page 15
-struct TCPHeader {
-  be16_t source;
-  be16_t dest;
-  be32_t seq;
-  be32_t ack_seq;
-#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
-  unsigned int res1 : 4;
-  unsigned int doff : 4;
-  unsigned int fin : 1;
-  unsigned int syn : 1;
-  unsigned int rst : 1;
-  unsigned int psh : 1;
-  unsigned int ack : 1;
-  unsigned int urg : 1;
-  unsigned int ece : 1;
-  unsigned int cwr : 1;
-#endif
-#if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
-  unsigned int doff : 4;
-  unsigned int res1 : 4;
-  unsigned int cwr : 1;
-  unsigned int ece : 1;
-  unsigned int urg : 1;
-  unsigned int ack : 1;
-  unsigned int psh : 1;
-  unsigned int rst : 1;
-  unsigned int syn : 1;
-  unsigned int fin : 1;
-#endif
-  be16_t window;
-  be16_t checksum;
-  be16_t urg_ptr;
-};
 
 // RFC793 Page 21
 // https://www.rfc-editor.org/rfc/rfc793.html#page-21
@@ -81,8 +44,8 @@ struct TCP {
 
   // send & recv buffers
   // ring buffers from [begin, begin+size)
-  RingBuffer<SEND_BUFF_SIZE> send;
-  RingBuffer<RECV_BUFF_SIZE> recv;
+  SendRingBuffer<SEND_BUFF_SIZE> send;
+  RecvRingBuffer<RECV_BUFF_SIZE> recv;
 
   // mss(maximum segment size): maximum of TCP payload(excluding TCP and IP
   // headers). default: 536. max(ipv4): mtu - 20(ipv4) - 20(tcp). max(ipv6): mtu

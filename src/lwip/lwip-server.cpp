@@ -8,6 +8,7 @@
 #include <unistd.h>
 
 #include "common.h"
+#include "timers.h"
 #include "ip.h"
 #include "lwip/apps/httpd.h"
 #include "lwip/arch.h"
@@ -41,6 +42,7 @@ int main(int argc, char *argv[]) {
         pbuf_free(p);
       }
     }
+    TIMERS.trigger();
     fflush(stdout);
     sys_check_timeouts();
     loop_yield();

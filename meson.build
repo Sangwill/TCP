@@ -65,6 +65,7 @@ lab_sources = [
 common_sources = [
         'src/lab/timers.cpp',
         'src/common.cpp',
+        'src/lab/buffer.cpp',
 ]
 
 lwip_client = executable('lwip-client',
@@ -81,46 +82,143 @@ lwip_server = executable('lwip-server',
 
 incdir = include_directories('include')
 
+tcp_with_nagle = library('tcp_with_nagle',
+        lab_sources,
+        common_sources,
+        include_directories: incdir,
+        cpp_args : '-DENABLE_NAGLE')
+
+tcp_new_reno = library('tcp_new_reno',
+        lab_sources,
+        common_sources,
+        include_directories: incdir,
+        cpp_args : ['-DENABLE_NAGLE', '-DENABLE_NEW_RENO'])
+
+tcp_no_nagle = library('tcp_no_nagle',
+        lab_sources,
+        common_sources,
+        include_directories: incdir)
+
 lab_client = executable('lab-client',
-            lab_sources,
-            common_sources,
             'src/lab/lab-client.cpp',
-            include_directories: incdir)
+            include_directories: incdir,
+            link_with: tcp_with_nagle)
+
+lab_client_with_new_reno = executable('lab-client-with-new-reno',
+            'src/lab/lab-client.cpp',
+            include_directories: incdir,
+            link_with: tcp_new_reno)
+
+lab_client_no_nagle = executable('lab-client-no-nagle',
+            'src/lab/lab-client.cpp',
+            include_directories: incdir,
+            link_with: tcp_no_nagle)
 
 lab_server = executable('lab-server',
-            lab_sources,
-            common_sources,
             'src/lab/lab-server.cpp',
-            include_directories: incdir)
+            include_directories: incdir,
+            link_with: tcp_with_nagle)
+
+lab_server_with_new_reno = executable('lab-server-with-new-reno',
+            'src/lab/lab-server.cpp',
+            include_directories: incdir,
+            link_with: tcp_new_reno)
+
+lab_server_no_nagle = executable('lab-server-no-nagle',
+            'src/lab/lab-server.cpp',
+            include_directories: incdir,
+            link_with: tcp_no_nagle)
+
+pcap_path = 'pcap'
 
 run_target('run-lwip-server',
   depends: [lwip_server],
-  command : [lwip_server, '-l', 's', '-r', 'c', '-p', 'server.pcap']
+  command : [lwip_server, '-l', 's', '-r', 'c', '-p', pcap_path / 'server.pcap']
 )
 
 run_target('run-lwip-client',
   depends: [lwip_client],
-  command : [lwip_client, '-l', 'c', '-r', 's', '-p', 'client.pcap']
+  command : [lwip_client, '-l', 'c', '-r', 's', '-p', pcap_path / 'client.pcap']
 )
 
 run_target('run-lwip-client-tun',
   depends: [lwip_client],
-  command : ['sudo', lwip_client, '-t', 'utun', '-p', 'lwip-client.pcap']
+  command : ['sudo', lwip_client, '-t', 'utun', '-p', pcap_path / 'lwip-client.pcap']
 )
 
 run_target('run-lab-client',
   depends: [lab_client],
-  command : [lab_client, '-l', 'c', '-r', 's', '-p', 'lab-client.pcap']
+  command : [lab_client, '-l', 'c', '-r', 's', '-p', pcap_path / 'lab-client.pcap']
 )
 
 run_target('run-lab-client-tun',
   depends: [lab_client],
-  command : [lab_client, '-t', 'utun', '-p', 'lab-client.pcap']
+  command : [lab_client, '-t', 'utun', '-p', pcap_path / 'lab-client.pcap']
 )
 
 run_target('run-lab-server',
   depends: [lab_server],
-  command : [lab_server, '-l', 's', '-r', 'c', '-p', 'lab-server.pcap']
+  command : [lab_server, '-l', 's', '-r', 'c', '-p', pcap_path / 'lab-server.pcap']
+)
+
+run_target('run-lab-server-no-nagle',
+  depends: [lab_server_no_nagle],
+  command : [lab_server_no_nagle, '-l', 's', '-r', 'c', '-p', pcap_path / 'lab-server-no-nagle.pcap', '-T', 'nagle']
+)
+
+run_target('run-lab-server-nagle',
+  depends: [lab_server],
+  command : [lab_server, '-l', 's', '-r', 'c', '-p', pcap_path / 'lab-server-nagle.pcap', '-T', 'nagle']
+)
+
+run_target('run-lwip-client-retransmission',
+  depends: [lwip_client],
+  command : [lwip_client, '-l', 'c', '-r', 's', '-p', pcap_path / 'client-retransmission.pcap', '-R', '0.4']
+)
+
+run_target('run-lab-server-retransmission',
+  depends: [lab_server_no_nagle],
+  command : [lab_server_no_nagle, '-l', 's', '-r', 'c', '-p', pcap_path / 'lab-server-retransmission.pcap']
+)
+
+run_target('run-lab-server-out-of-order',
+  depends: [lab_server_no_nagle],
+  command : [lab_server_no_nagle, '-l', 's', '-r', 'c', '-p', pcap_path / 'lab-server-out-of-order.pcap', '-s', '0,200', '-T', 'out-of-order']
+)
+
+run_target('run-lwip-client-cong-avoid',
+  depends: [lwip_client],
+  command : [lwip_client, '-l', 'c', '-r', 's', '-p', pcap_path / 'client-cong-avoid.pcap', '-T', 'cong-avoid-client']
+)
+
+run_target('run-lwip-client-cong-avoid-2',
+  depends: [lwip_client],
+  command : [lwip_client, '-l', 'c', '-r', 's', '-p', pcap_path / 'client-cong-avoid-2.pcap', '-T', 'cong-avoid-client-2']
+)
+
+run_target('run-lab-client-new-reno',
+  depends: [lab_client],
+  command : [lab_client, '-l', 'c', '-r', 's', '-p', pcap_path / 'lab-client-new-reno.pcap', '-T', 'new-reno']
+)
+
+run_target('run-lab-server-cong-avoid',
+  depends: [lab_server_no_nagle],
+  command : [lab_server_no_nagle, '-l', 's', '-r', 'c', '-p', pcap_path / 'lab-server-cong-avoid.pcap', '-T', 'cong-avoid-server']
+)
+
+run_target('run-lab-server-cong-avoid-2',
+  depends: [lab_server_no_nagle],
+  command : [lab_server_no_nagle, '-l', 's', '-r', 'c', '-p', pcap_path / 'lab-server-cong-avoid-2.pcap', '-T', 'cong-avoid-server']
+)
+
+run_target('run-lab-server-new-reno',
+  depends: [lab_server_with_new_reno],
+  command : [lab_server_with_new_reno, '-l', 's', '-r', 'c', '-p', pcap_path / 'lab-server-new-reno.pcap', '-T', 'cong-avoid-server']
+)
+
+run_target('run-lab-server-no-new-reno',
+  depends: [lab_server],
+  command : [lab_server, '-l', 's', '-r', 'c', '-p', pcap_path / 'lab-server-no-new-reno.pcap', '-T', 'cong-avoid-server']
 )
 
 # testing
@@ -129,14 +227,14 @@ test1_seq_compare = executable('test1-seq-compare',
             common_sources,
             'src/test/test1_seq_compare.cpp',
             include_directories: incdir)
-test('test1 seq comparison', test1_seq_compare)
+test('test1 seq comparison', test1_seq_compare, timeout: 100)
 
 test2_initial_seq = executable('test2-initial-seq',
             lab_sources,
             common_sources,
             'src/test/test2_initial_seq.cpp',
             include_directories: incdir)
-test('test2 initial seq generation', test2_initial_seq)
+test('test2 initial seq generation', test2_initial_seq, timeout: 100)
 
 root = meson.source_root()
 python3 = import('python').find_installation('python3')
@@ -145,34 +243,89 @@ sudo = find_program('sudo')
 test('test3a 3-way handshake (client)',
     python3,
     args: [root / 'src/test/test3a_3way_handshake_client.py'],
-    is_parallel : false)
+    is_parallel : false,
+    timeout: 100)
 
 test('test3b 3-way handshake (server)',
     python3,
     args: [root / 'src/test/test3b_3way_handshake_server.py'],
-    is_parallel : false)
+    is_parallel : false,
+    timeout: 100)
 
 test('test4a http request & response (client)',
     python3,
     args: [root / 'src/test/test4a_http_client.py'],
-    is_parallel : false)
+    is_parallel : false,
+    timeout: 100)
 
 test('test4b http request & response (server)',
     python3,
     args: [root / 'src/test/test4b_http_server.py'],
-    is_parallel : false)
+    is_parallel : false,
+    timeout: 100)
 
 test('test5a connection termination (client)',
     python3,
     args: [root / 'src/test/test5a_termination_client.py'],
-    is_parallel : false)
+    is_parallel : false,
+    timeout: 100)
 
 test('test5b connection termination (server)',
     python3,
     args: [root / 'src/test/test5b_termination_server.py'],
-    is_parallel : false)
+    is_parallel : false,
+    timeout: 100)
 
 test('test6 visit baidu (client) (requires sudo)',
     sudo,
     args: ['python3', root / 'src/test/test6_visit_baidu.py'],
-    is_parallel : false)
+    is_parallel : false,
+    timeout: 100)
+
+test('test7a retransmission (server)',
+    python3,
+    args: [root / 'src/test/test7a_retransmission_server.py'],
+    is_parallel : false,
+    timeout: 100)
+
+test('test7b out-of-order (client)',
+    python3,
+    args: [root / 'src/test/test7b_out_of_order_client.py'],
+    is_parallel : false,
+    timeout: 100)
+
+test('test8a nagle (server)',
+    python3,
+    args: [root / 'src/test/test8a_nagle_server.py'],
+    is_parallel : false,
+    timeout: 100)
+
+test('test8b no nagle (server)',
+    python3,
+    args: [root / 'src/test/test8b_no_nagle_server.py'],
+    is_parallel : false,
+    timeout: 100)
+
+test('test9a cong avoid (server)',
+    python3,
+    args: [root / 'src/test/test9a_cong_avoid_server.py'],
+    is_parallel : false,
+    timeout: 100)
+
+test('test9b cong avoid (server)',
+    python3,
+    args: [root / 'src/test/test9b_cong_avoid_server.py'],
+    is_parallel : false,
+    timeout: 100)
+
+test('test10a new reno (server)',
+    python3,
+    args: [root / 'src/test/test10a_new_reno_server.py'],
+    is_parallel : false,
+    timeout: 100)
+
+test('test10b no new reno (server)',
+    python3,
+    args: [root / 'src/test/test10b_no_new_reno_server.py'],
+    is_parallel : false,
+    timeout: 100)

@@ -5,12 +5,15 @@ import os
 import atexit
 
 
+timeout = 100
+
+
 def kill():
     # kill processes
-    subprocess.run("killall lwip-server", shell=True, capture_output=True)
-    subprocess.run("killall lwip-client", shell=True, capture_output=True)
-    subprocess.run("killall lab-server", shell=True, capture_output=True)
-    subprocess.run("killall lab-client", shell=True, capture_output=True)
+    subprocess.run("killall -r '^lwip-server.*'", shell=True, capture_output=True)
+    subprocess.run("killall -r '^lwip-client.*'", shell=True, capture_output=True)
+    subprocess.run("killall -r '^lab-server.*'", shell=True, capture_output=True)
+    subprocess.run("killall -r '^lab-client.*'", shell=True, capture_output=True)
 
 
 def kill_callback(proc):

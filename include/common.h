@@ -11,6 +11,8 @@
 #include <sys/time.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <vector>
+#include <stdexcept>
 
 // assume interface MTU is 1500 bytes
 #define MTU 1500
@@ -45,6 +47,9 @@ extern double send_drop_rate;
 // configurable packet send delay in ms
 extern double send_delay_min;
 extern double send_delay_max;
+
+// configurable http server index page
+extern std::vector<std::string> http_index;
 
 // configurable congestion control algorithm
 enum CongestionControlAlgorithm {
@@ -99,50 +104,6 @@ void send_packet(const uint8_t *data, size_t size);
 
 // recv packet from remote
 ssize_t recv_packet(uint8_t *buffer, size_t buffer_size);
-
-static inline size_t min(size_t a, size_t b) { return a > b ? b : a; }
-
-template <size_t N> struct RingBuffer {
-  // ring buffer from [begin, begin+size)
-  uint8_t buffer[N];
-  size_t begin;
-  size_t size;
-
-  RingBuffer() { begin = size = 0; }
-
-  // write data to ring buffer
-  size_t write(const uint8_t *data, size_t len) {
-    size_t bytes_left = N - size;
-    size_t bytes_written = min(bytes_left, len);
-    // first part
-    size_t part1_index = (begin + size) % N;
-    size_t part1_size = min(N - part1_index, bytes_written);
-    memcpy(&buffer[part1_index], data, part1_size);
-    // second part if wrap around
-    if (N - part1_index < bytes_written) {
-      memcpy(&buffer[0], &data[part1_size], bytes_written - part1_size);
-    }
-    size += bytes_written;
-    return bytes_written;
-  }
-
-  // read data from ring buffer
-  size_t read(uint8_t *data, size_t len) {
-    size_t bytes_read = min(size, len);
-    // first part
-    size_t part1_size = min(N - begin, bytes_read);
-    memcpy(data, &buffer[begin], part1_size);
-    // second part if wrap around
-    if (N - begin < bytes_read) {
-      memcpy(&data[part1_size], buffer, bytes_read - part1_size);
-    }
-    size -= bytes_read;
-    begin = (begin + bytes_read) % N;
-    return bytes_read;
-  }
-
-  size_t free_bytes() const { return N - size; }
-};
 
 void parse_argv(int argc, char *argv[]);
 

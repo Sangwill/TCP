@@ -43,10 +43,10 @@ struct read_http_response {
   int read_body_length = 0;
 
   int operator()() {
-    char buffer[1024];
+    char buffer[10 << 10];  // 10KB
     ssize_t res = tcp_read(fd, (uint8_t *)buffer, sizeof(buffer) - 1);
     if (res > 0) {
-      printf("Read '");
+      printf("Read %lu bytes '", res);
       fwrite(buffer, 1, res, stdout);
       printf("' from tcp\n");
 
@@ -87,7 +87,8 @@ struct read_http_response {
       }
       fflush(fp);
 
-      if (read_body_length >= content_length) {
+      // fix bug: if http response header undone then content_length is -1
+      if (read_body_length >= content_length && content_length >= 0) {
         // done
         close_and_exit fn;
         fn.fd = fd;
@@ -97,7 +98,7 @@ struct read_http_response {
     }
 
     // try to read next data
-    return 100;
+    return 1;
   }
 };
 
@@ -174,6 +175,7 @@ int main(int argc, char *argv[]) {
       process_ip(buffer, size);
     }
     TIMERS.trigger();
+    fflush(stdout);
   }
   return 0;
 }

@@ -85,7 +85,7 @@
 #define HTTPC_DEBUG_SERIOUS      (HTTPC_DEBUG | LWIP_DBG_LEVEL_SERIOUS)
 
 #define HTTPC_POLL_INTERVAL     1
-#define HTTPC_POLL_TIMEOUT      30 /* 15 seconds */
+#define HTTPC_POLL_TIMEOUT      200 /* 100 seconds */
 
 #define HTTPC_CONTENT_LEN_INVALID 0xFFFFFFFF
 

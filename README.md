@@ -13,3 +13,6 @@
 ## 文档
 
 文档源码见 [TCP-Lab-Docs](https://github.com/thu-cs-lab/TCP-Lab-Docs) 仓库，编译后的版本在 [此处](https://lab.cs.tsinghua.edu.cn/tcp/doc/) 发布。
+
+## 说明
+基于 2021 版本修改，加入了更多自动测试，如有 bug 请及时向助教同学反馈。
