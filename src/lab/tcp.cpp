@@ -1,4 +1,4 @@
-#include "tcp.h"
+#include "../include/tcp.h"
 #include "common.h"
 #include "timers.h"
 #include <assert.h>
@@ -226,8 +226,25 @@ void process_tcp(const IPHeader *ip, const uint8_t *data, size_t size) {
           // with 4 bytes option(MSS)
           // "a SYN segment sent of the form:
           // <SEQ=ISS><ACK=RCV.NXT><CTL=SYN,ACK>"
-          UNIMPLEMENTED()
-
+          //UNIMPLEMENTED()
+          uint8_t buffer[44];
+          construct_ip_header(buffer, new_tcp, sizeof(buffer));
+          TCPHeader *tcp_hdr = (TCPHeader *)&buffer[20];
+          memset(tcp_hdr, 0, 20);
+          tcp_hdr->source = htons(new_tcp->local_port);
+          tcp_hdr->dest = htons(new_tcp->remote_port);
+          tcp_hdr->seq = htonl(initial_seq);
+          tcp_hdr->ack_seq = htonl(new_tcp->rcv_nxt);
+          tcp_hdr->syn = 1;
+          tcp_hdr->ack = 1;
+          tcp_hdr->doff = 24 / 4;
+          tcp_hdr->window = htons(tcp->recv.free_bytes());
+          // buffer[40] = 0x02; // kind
+          // buffer[41] = 0x04; // length
+          // buffer[42] = tcp->local_mss >> 8;
+          // buffer[43] = tcp->local_mss;
+          update_tcp_ip_checksum(buffer);
+          send_packet(buffer, sizeof(buffer));
           // "SND.NXT is set to ISS+1 and SND.UNA to ISS.  The connection
           // state should be changed to SYN-RECEIVED."
           new_tcp->snd_nxt = initial_seq + 1;
@@ -277,8 +294,13 @@ void process_tcp(const IPHeader *ip, const uint8_t *data, size_t size) {
           // SEG.SEQ.  SND.UNA should be advanced to equal SEG.ACK (if there
           // is an ACK), and any segments on the retransmission queue which
           // are thereby acknowledged should be removed."
-          UNIMPLEMENTED()
-
+          
+          //UNIMPLEMENTED()
+          tcp->rcv_nxt = seg_seq + 1;
+          tcp->irs = seg_seq;
+          if(tcp_header->ack){
+            tcp->snd_una = seg_ack;
+          }
           if (tcp_seq_gt(tcp->snd_una, tcp->iss)) {
             // "If SND.UNA > ISS (our SYN has been ACKed), change the connection
             // state to ESTABLISHED,"
@@ -288,7 +310,20 @@ void process_tcp(const IPHeader *ip, const uint8_t *data, size_t size) {
             // "form an ACK segment
             // <SEQ=SND.NXT><ACK=RCV.NXT><CTL=ACK>
             // and send it."
-            UNIMPLEMENTED()
+            //UNIMPLEMENTED()
+            uint8_t buffer[40];
+            construct_ip_header(buffer, tcp, sizeof(buffer));
+            TCPHeader *tcp_hdr = (TCPHeader *)&buffer[20];
+            memset(tcp_hdr, 0, 20);
+            tcp_hdr->source = htons(tcp->local_port);
+            tcp_hdr->dest = htons(tcp->remote_port);
+            tcp_hdr->ack_seq = htonl(tcp->rcv_nxt);
+            tcp_hdr->seq = htonl(tcp->snd_nxt);
+            tcp_hdr->doff = 20 / 4;
+            tcp_hdr->ack = 1;
+            tcp_hdr->window = htons(tcp->recv.free_bytes());
+            update_tcp_ip_checksum(buffer);
+            send_packet(buffer, sizeof(buffer));
 
             // TODO(step 2: 3-way handshake)
             // https://www.rfc-editor.org/rfc/rfc1122#page-94
@@ -297,13 +332,31 @@ void process_tcp(const IPHeader *ip, const uint8_t *data, size_t size) {
             // SND.WND <- SEG.WND
             // SND.WL1 <- SEG.SEQ
             // SND.WL2 <- SEG.ACK"
-            UNIMPLEMENTED()
+            //UNIMPLEMENTED()
+            tcp->snd_wnd = seg_wnd;
+            tcp->snd_wl1 = seg_seq;
+            tcp->snd_wl2 = seg_ack;
           } else {
             // "Otherwise enter SYN-RECEIVED"
             // "form a SYN,ACK segment
             //<SEQ=ISS><ACK=RCV.NXT><CTL=SYN,ACK>
             // and send it."
-            UNIMPLEMENTED()
+            //UNIMPLEMENTED()
+            tcp->set_state(TCPState::SYN_RCVD);
+            uint8_t buffer[40];
+            construct_ip_header(buffer, tcp, sizeof(buffer));
+            TCPHeader *tcp_hdr = (TCPHeader *)&buffer[20];
+            memset(tcp_hdr, 0, 20);
+            tcp_hdr->source = htons(tcp->local_port);
+            tcp_hdr->dest = htons(tcp->remote_port);
+            tcp_hdr->ack_seq = htonl(tcp->rcv_nxt);
+            tcp_hdr->seq = htonl(tcp->iss);
+            tcp_hdr->doff = 20 / 4;
+            tcp_hdr->ack = 1;
+            tcp_hdr->syn = 1;
+            tcp_hdr->window = htons(tcp->recv.free_bytes());
+            update_tcp_ip_checksum(buffer);
+            send_packet(buffer, sizeof(buffer));
           }
         }
 
