@@ -418,14 +418,22 @@ void process_tcp(const IPHeader *ip, const uint8_t *data, size_t size) {
           if (tcp->state == ESTABLISHED) {
             // TODO(step 3: send & receive)
             // "If SND.UNA < SEG.ACK =< SND.NXT then, set SND.UNA <- SEG.ACK."
-            UNIMPLEMENTED()
-
+            //UNIMPLEMENTED()
+            if (tcp_seq_lt(tcp->snd_una,seg_ack) && tcp_seq_le(seg_ack,tcp->snd_nxt)){
+              tcp->snd_una = seg_ack;
+            }
             // TODO(step 3: send & receive)
             // "If SND.UNA < SEG.ACK =< SND.NXT, the send window should be
             // updated.  If (SND.WL1 < SEG.SEQ or (SND.WL1 = SEG.SEQ and
             // SND.WL2 =< SEG.ACK)), set SND.WND <- SEG.WND, set
             // SND.WL1 <- SEG.SEQ, and set SND.WL2 <- SEG.ACK."
-            UNIMPLEMENTED()
+            if (tcp_seq_lt(tcp->snd_wl1, seg_seq) || 
+                ((tcp->snd_wl1 == seg_seq) && tcp_seq_le(tcp->snd_wl2, seg_ack))) {
+                tcp->snd_wnd = seg_wnd;
+                // tcp->snd_wnd = seg_wnd << tcp->wnd_shift_cnt;
+                tcp->snd_wl1 = seg_seq;
+                tcp->snd_wl2 = seg_ack;
+            }
           }
 
           // "FIN-WAIT-1 STATE"
@@ -433,6 +441,7 @@ void process_tcp(const IPHeader *ip, const uint8_t *data, size_t size) {
             // "In addition to the processing for the ESTABLISHED state, if
             // our FIN is now acknowledged then enter FIN-WAIT-2 and continue
             // processing in that state."
+            tcp->set_state(FIN_WAIT_2);
           }
 
           // "FIN-WAIT-2 STATE"
@@ -447,6 +456,8 @@ void process_tcp(const IPHeader *ip, const uint8_t *data, size_t size) {
             // "The only thing that can arrive in this state is an
             // acknowledgment of our FIN.  If our FIN is now acknowledged,
             // delete the TCB, enter the CLOSED state, and return."
+            tcp->set_state(CLOSED);
+            return;
           }
         }
 
@@ -463,11 +474,26 @@ void process_tcp(const IPHeader *ip, const uint8_t *data, size_t size) {
             // RCV.NXT over the data accepted, and adjusts RCV.WND as
             // appropriate to the current buffer availability.  The total of
             // RCV.NXT and RCV.WND should not be reduced."
-            UNIMPLEMENTED()
-
+            //UNIMPLEMENTED()
+            auto res = tcp->recv.write(payload, seg_len,0);
+            tcp->rcv_nxt += res;
+            tcp->rcv_wnd = tcp->recv.free_bytes();
             // "Send an acknowledgment of the form:
             // <SEQ=SND.NXT><ACK=RCV.NXT><CTL=ACK>"
-            UNIMPLEMENTED()
+            // UNIMPLEMENTED()
+            uint8_t buffer[40];
+            construct_ip_header(buffer, tcp, sizeof(buffer));
+            TCPHeader *tcp_hdr = (TCPHeader *)&buffer[20];
+            memset(tcp_hdr, 0, 20);
+            tcp_hdr->source = htons(tcp->local_port);
+            tcp_hdr->dest = htons(tcp->remote_port);
+            tcp_hdr->ack_seq = htonl(tcp->rcv_nxt);
+            tcp_hdr->seq = htonl(tcp->snd_nxt);
+            tcp_hdr->doff = 20 / 4;
+            tcp_hdr->ack = 1;
+            tcp_hdr->window = htons(tcp->recv.free_bytes());
+            update_tcp_ip_checksum(buffer);
+            send_packet(buffer, sizeof(buffer));
           }
         }
 
@@ -487,7 +513,22 @@ void process_tcp(const IPHeader *ip, const uint8_t *data, size_t size) {
           // over the FIN, and send an acknowledgment for the FIN.  Note that
           // FIN implies PUSH for any segment text not yet delivered to the
           // user."
-          UNIMPLEMENTED();
+          //UNIMPLEMENTED();
+          tcp->rcv_nxt = seg_seq + seg_len + 1;
+          uint8_t buffer[40];
+          construct_ip_header(buffer, tcp, sizeof(buffer));
+
+          TCPHeader *tcp_hdr = (TCPHeader *)&buffer[20];
+          memset(tcp_hdr, 0, 20);
+          tcp_hdr->source = htons(tcp->local_port);
+          tcp_hdr->dest = htons(tcp->remote_port);
+          tcp_hdr->seq = htonl(tcp->snd_nxt);
+          tcp_hdr->ack_seq = htonl(tcp->rcv_nxt);
+          tcp_hdr->doff = 20 / 4;
+          tcp_hdr->ack = 1;
+          tcp_hdr->window = htons(tcp->recv.free_bytes());
+          update_tcp_ip_checksum(buffer);
+          send_packet(buffer, sizeof(buffer));
 
           if (tcp->state == SYN_RCVD || tcp->state == ESTABLISHED) {
             // Enter the CLOSE-WAIT state
@@ -748,8 +789,8 @@ void tcp_connect(int fd, uint32_t dst_addr, uint16_t dst_port) {
 
   // TODO(step 3: send & receive)
   // window size: size of empty bytes in recv buffer
-  tcp_hdr->window = 0;
-  UNIMPLEMENTED_WARN();
+  tcp_hdr->window = htons(tcp->recv.free_bytes());
+  //UNIMPLEMENTED_WARN();
 
   // mss option, rfc793 page 18
   // https://www.rfc-editor.org/rfc/rfc793.html#page-18
@@ -776,55 +817,74 @@ ssize_t tcp_write(int fd, const uint8_t *data, size_t size) {
              tcp->state == TCPState::CLOSE_WAIT) {
     // queue data for transmission
     size_t res = tcp->send.write(data, size);
+    //printf("TCP SEND SIZE=%zu \n", tcp->send.size);
 
     // send data to remote
     size_t bytes_to_send = tcp->send.size;
-
+    bytes_to_send -= tcp->send.sent_size;
     // TODO(step 3: send & receive)
     // consider mss and send sequence space
-    // send sequence space: https://www.rfc-editor.org/rfc/rfc793.html#page-20 figure 4
-    // compute the segment length to send
-    size_t segment_len = 0;
-    UNIMPLEMENTED()
+    // send sequence space: https://www.rfc-editor.org/rfc/rfc793.html#page-20
+    // figure 4 compute the segment length to send
+    while (bytes_to_send) {
+      //printf("BYTES TO SEND TO REMOTE=%zu \n", bytes_to_send);
+      
+      size_t segment_len =
+        bytes_to_send < tcp->remote_mss ? bytes_to_send : tcp->remote_mss;
+      bytes_to_send -= segment_len;
+      // UNIMPLEMENTED()
+      if (segment_len > 0) {
+        printf("Sending segment of len %zu to remote\n", segment_len);
+        // send data now
 
-    if (segment_len > 0) {
-      printf("Sending segment of len %zu to remote\n", segment_len);
-      // send data now
+        // 20 IP header & 20 TCP header
+        uint16_t total_length = 20 + 20 + segment_len;
+        uint8_t buffer[MTU];
+        construct_ip_header(buffer, tcp, total_length);
 
-      // 20 IP header & 20 TCP header
-      uint16_t total_length = 20 + 20 + segment_len;
-      uint8_t buffer[MTU];
-      construct_ip_header(buffer, tcp, total_length);
+        // tcp
+        TCPHeader *tcp_hdr = (TCPHeader *)&buffer[20];
+        memset(tcp_hdr, 0, 20);
+        tcp_hdr->source = htons(tcp->local_port);
+        tcp_hdr->dest = htons(tcp->remote_port);
+        // this segment occupies range:
+        // [snd_nxt, snd_nxt+seg_len)
+        tcp_hdr->seq = htonl(tcp->snd_nxt);
+        tcp->snd_nxt += segment_len;
+        // flags
+        tcp_hdr->doff = 20 / 4; // 20 bytes
 
-      // tcp
-      TCPHeader *tcp_hdr = (TCPHeader *)&buffer[20];
-      memset(tcp_hdr, 0, 20);
-      tcp_hdr->source = htons(tcp->local_port);
-      tcp_hdr->dest = htons(tcp->remote_port);
-      // this segment occupies range:
-      // [snd_nxt, snd_nxt+seg_len)
-      tcp_hdr->seq = htonl(tcp->snd_nxt);
-      tcp->snd_nxt += segment_len;
-      // flags
-      tcp_hdr->doff = 20 / 4; // 20 bytes
+        // TODO(step 3: send & receive)
+        // set ack bit and ack_seq
+        tcp_hdr->ack = 1;
+        tcp_hdr->ack_seq = htonl(tcp->rcv_nxt);
+        // TODO(step 3: send & receive)
+        // window size: size of empty bytes in recv buffer
+        tcp_hdr->window = htons(tcp->recv.free_bytes());
+        //UNIMPLEMENTED();
+        //If the urgent flag is set, then SND.UP <- SND.NXT-1 and set the
+        //urgent pointer in the outgoing segments.
+        // if (tcp_hdr->urg){
+        //   tcp_hdr->urg_ptr = htons(tcp->snd_nxt - 1);
+        // }
+        // payload
+        size_t bytes_read = tcp->send.read(&buffer[40], segment_len);
+        // should never fail
+        // printf("+++++++++++++++++++++++++++++++++++\n");
+        // printf("Read %zu bytes from send buffer\n", bytes_read);
+        // printf("Sending segment of len %zu to remote\n", segment_len);
+        // TODO : BUG
+        //assert(bytes_read == segment_len);
+        // 如果assert失败，抛出错误，输出bytes_read和 segment_len
 
-      // TODO(step 3: send & receive)
-      // set ack bit and ack_seq
 
-      // TODO(step 3: send & receive)
-      // window size: size of empty bytes in recv buffer
-      tcp_hdr->window = 0;
-      UNIMPLEMENTED();
+        update_tcp_ip_checksum(buffer);
+        send_packet(buffer, total_length);
+      }
 
-      // payload
-      size_t bytes_read = tcp->send.read(&buffer[40], segment_len);
-      // should never fail
-      assert(bytes_read == segment_len);
-
-      update_tcp_ip_checksum(buffer);
-      send_packet(buffer, total_length);
     }
-
+    
+    
     return res;
   }
   return -1;
@@ -836,9 +896,9 @@ ssize_t tcp_read(int fd, uint8_t *data, size_t size) {
 
   // TODO(step 3: send & receive)
   // copy from recv_buffer to user data
-  UNIMPLEMENTED();
-
-  return 0;
+  //UNIMPLEMENTED();
+  auto bytes = tcp->recv.read(data, size);
+  return bytes;
 }
 
 void tcp_shutdown(int fd) {
@@ -851,7 +911,22 @@ void tcp_shutdown(int fd) {
     // TODO(step 4: connection termination)
     // "Queue this until all preceding SENDs have been segmentized, then
     // form a FIN segment and send it. In any case, enter FIN-WAIT-1 state."
-    UNIMPLEMENTED();
+    //UNIMPLEMENTED();
+    uint8_t buffer[40];
+    construct_ip_header(buffer, tcp, sizeof(buffer));
+    TCPHeader *tcp_hdr = (TCPHeader *)&buffer[20];
+    memset(tcp_hdr, 0, 20);
+    tcp_hdr->source = htons(tcp->local_port);
+    tcp_hdr->dest = htons(tcp->remote_port);
+    tcp_hdr->seq = htonl(tcp->snd_nxt);
+
+    tcp_hdr->doff = 5;
+    tcp_hdr->fin = 1;
+    tcp_hdr->window = htons(tcp->recv.free_bytes());
+    tcp->snd_nxt += 1;
+    update_tcp_ip_checksum(buffer);
+
+    send_packet(buffer, sizeof(buffer));
 
     tcp->set_state(TCPState::FIN_WAIT_1);
   } else if (tcp->state == TCPState::CLOSE_WAIT) {
@@ -859,7 +934,21 @@ void tcp_shutdown(int fd) {
     // CLOSE_WAIT STATE
     // "Queue this request until all preceding SENDs have been
     // segmentized; then send a FIN segment, enter LAST-ACK state."
-    UNIMPLEMENTED();
+    //UNIMPLEMENTED();
+    uint8_t buffer[40];
+    construct_ip_header(buffer, tcp, sizeof(buffer));
+    TCPHeader *tcp_hdr = (TCPHeader *)&buffer[20];
+    memset(tcp_hdr, 0, 20);
+    tcp_hdr->source = htons(tcp->local_port);
+    tcp_hdr->dest = htons(tcp->remote_port);
+    tcp_hdr->seq = htonl(tcp->snd_nxt);
+    tcp_hdr->doff = 5;
+    tcp_hdr->fin = 1;
+    tcp->snd_nxt += 1;
+    tcp_hdr->window = htons(tcp->recv.free_bytes());
+
+    update_tcp_ip_checksum(buffer);
+    send_packet(buffer, sizeof(buffer));
     tcp->set_state(TCPState::LAST_ACK);
   }
 }
