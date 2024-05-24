@@ -21,7 +21,7 @@
 #define UNIMPLEMENTED()                                                        \
   do {                                                                         \
     printf(RED "UNIMPLEMENTED at %s:%d\n" RESET, __FILE__, __LINE__);                    \
-    exit(1);                                                                   \
+                                                                       \
   } while (0);
 
 #define UNIMPLEMENTED_WARN()                                                   \

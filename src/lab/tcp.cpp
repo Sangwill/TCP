@@ -4,10 +4,23 @@
 #include <assert.h>
 #include <map>
 #include <stdio.h>
-
 // mapping from fd to TCP connection
 std::map<int, TCP *> tcp_fds;
-
+struct Retransmission {
+  int fd;
+  size_t operator()() {
+    
+    TCP *tcp = tcp_fds[fd];
+    assert(tcp);
+    if (tcp->retransmission_queue.empty()) {
+      return -1;
+    } else {
+      printf("TRY RETRANSMIT\n");
+      tcp->retransmission();
+      return 2000;
+    }
+  }
+};
 // some helper functions
 const char *tcp_state_to_string(TCPState state) {
   switch (state) {
@@ -46,7 +59,64 @@ void TCP::set_state(TCPState new_state) {
   fflush(stdout);
   state = new_state;
 }
+// update retransmission queue
+void TCP::push_to_retransmission_queue(const uint8_t *buffer, const size_t header_len, const size_t body_len) {
+  TCPHeader *tcp_hdr = (TCPHeader *)&buffer[20];
+  uint32_t seq = ntohl(tcp_hdr->seq);
+  printf("|* Push Retransmission Queue, seq = %lu *|\n", seq);
+  for (auto seg : retransmission_queue) {
+    TCPHeader *seg_tcp_hdr = (TCPHeader *)&seg.buffer[20];
+    uint32_t seg_seq = ntohl(seg_tcp_hdr->seq);
+    if (seg_seq == seq) {
+      printf("|* Already in Retransmission Queue *|\n");
+      return;
+    }
+  }
+  printf("|* Push Packet *|\n");
+  Segment new_seg = Segment(buffer, header_len, body_len, current_ts_msec());
+  retransmission_queue.push_back(new_seg);
+  printf("retransmission queue size = %lu\n", retransmission_queue.size());
+}
 
+void TCP::pop_from_retransmission_queue(const uint32_t seg_ack) {
+  printf("|* Pop Retransmission Queue *|\n");
+  ssize_t index = -1;
+  for (ssize_t i = 0, iEnd = retransmission_queue.size(); i < iEnd; i++) {
+    auto& seg = retransmission_queue[i];
+    TCPHeader *tcp_hdr = (TCPHeader *)&seg.buffer[20];
+    uint32_t seg_seq = ntohl(tcp_hdr->seq);
+    // match packet
+    if (0 < seg.body_len) {
+      if (seg_seq + seg.body_len == seg_ack) {
+        index = i;
+        break;
+      }
+    } else {
+      if (seg_seq + 1 == seg_ack) {
+        index = i;
+        break;
+      }
+    }
+  }
+  // new ACK
+  if (index != -1) {
+    printf("|* Pop Packet *|\n");
+    retransmission_queue.erase(retransmission_queue.begin(), retransmission_queue.begin() + index + 1);
+  }
+  printf("retransmission queue size = %lu\n", retransmission_queue.size());
+}
+
+void TCP::retransmission() {
+  uint64_t current_ms = current_ts_msec();
+  // printf("current_ms = %llu\n", current_ms);
+  for (auto seg : retransmission_queue) {
+    // printf("start_ms = %llu\n", seg.start_ms);
+    if (RTO + seg.start_ms < current_ms) {
+      printf("|* Retransmission *|\n");
+      send_packet(seg.buffer, seg.header_len + seg.body_len);
+    }
+  }
+}
 // construct ip header from tcp connection
 void construct_ip_header(uint8_t *buffer, const TCP *tcp,
                          uint16_t total_length) {
@@ -190,6 +260,7 @@ void process_tcp(const IPHeader *ip, const uint8_t *data, size_t size) {
           // formatted as follows:
           // <SEQ=SEG.ACK><CTL=RST>
           // Return."
+          printf("++++++++++++AT HERE++++++++++++\n");
           UNIMPLEMENTED()
           return;
         }
@@ -247,11 +318,19 @@ void process_tcp(const IPHeader *ip, const uint8_t *data, size_t size) {
           send_packet(buffer, sizeof(buffer));
           // "SND.NXT is set to ISS+1 and SND.UNA to ISS.  The connection
           // state should be changed to SYN-RECEIVED."
+
+          new_tcp->push_to_retransmission_queue(buffer, sizeof(buffer), 0);
+          // start retransmission timer
+          Retransmission retransmission_fn;
+          retransmission_fn.fd = new_fd;
+          TIMERS.add_job(retransmission_fn, current_ts_msec());
+          
           new_tcp->snd_nxt = initial_seq + 1;
           new_tcp->snd_una = initial_seq;
           new_tcp->snd_wnd = seg_wnd;
           new_tcp->rcv_wnd = new_tcp->recv.free_bytes();
           new_tcp->snd_wl2 = initial_seq - 1;
+          printf("+++++++++++++NOW SEND SYN+ACK TO CLIENT++++++++++++++++\n");
           new_tcp->set_state(TCPState::SYN_RCVD);
           return;
         }
@@ -263,6 +342,7 @@ void process_tcp(const IPHeader *ip, const uint8_t *data, size_t size) {
         // "If the state is SYN-SENT then"
         // "If the ACK bit is set"
         if (tcp_header->ack) {
+          tcp->pop_from_retransmission_queue(seg_ack);
           // "If SEG.ACK =< ISS, or SEG.ACK > SND.NXT, send a reset (unless
           // the RST bit is set, if so drop the segment and return)
           //<SEQ=SEG.ACK><CTL=RST>
@@ -270,6 +350,7 @@ void process_tcp(const IPHeader *ip, const uint8_t *data, size_t size) {
           if (tcp_seq_le(seg_ack, tcp->iss) ||
               tcp_seq_gt(seg_ack, tcp->snd_nxt)) {
             // send a reset when !RST
+            printf("++++++++++++AT HERE++++++++++++\n");
             UNIMPLEMENTED()
             return;
           }
@@ -304,6 +385,7 @@ void process_tcp(const IPHeader *ip, const uint8_t *data, size_t size) {
           if (tcp_seq_gt(tcp->snd_una, tcp->iss)) {
             // "If SND.UNA > ISS (our SYN has been ACKed), change the connection
             // state to ESTABLISHED,"
+            printf("+++++++++++++INTO IT++++++++++++++++\n");
             tcp->set_state(TCPState::ESTABLISHED);
 
             // TODO(step 2: 3-way handshake)
@@ -324,7 +406,11 @@ void process_tcp(const IPHeader *ip, const uint8_t *data, size_t size) {
             tcp_hdr->window = htons(tcp->recv.free_bytes());
             update_tcp_ip_checksum(buffer);
             send_packet(buffer, sizeof(buffer));
-
+            // tcp->push_to_retransmission_queue(buffer, sizeof(buffer), 0);
+            // // start retransmission timer
+            // Retransmission retransmission_fn;
+            // retransmission_fn.fd = pair.first;
+            // TIMERS.add_job(retransmission_fn, current_ts_msec());
             // TODO(step 2: 3-way handshake)
             // https://www.rfc-editor.org/rfc/rfc1122#page-94
             // "When the connection enters ESTABLISHED state, the following
@@ -342,6 +428,7 @@ void process_tcp(const IPHeader *ip, const uint8_t *data, size_t size) {
             //<SEQ=ISS><ACK=RCV.NXT><CTL=SYN,ACK>
             // and send it."
             //UNIMPLEMENTED()
+            printf("+++++++++++++INTO IT++++++++++++++++\n");
             tcp->set_state(TCPState::SYN_RCVD);
             uint8_t buffer[40];
             construct_ip_header(buffer, tcp, sizeof(buffer));
@@ -357,6 +444,11 @@ void process_tcp(const IPHeader *ip, const uint8_t *data, size_t size) {
             tcp_hdr->window = htons(tcp->recv.free_bytes());
             update_tcp_ip_checksum(buffer);
             send_packet(buffer, sizeof(buffer));
+            // tcp->push_to_retransmission_queue(buffer, sizeof(buffer), 0);
+            // // start retransmission timer
+            // Retransmission retransmission_fn;
+            // retransmission_fn.fd = pair.first;
+            // TIMERS.add_job(retransmission_fn, current_ts_msec());
           }
         }
 
@@ -384,13 +476,56 @@ void process_tcp(const IPHeader *ip, const uint8_t *data, size_t size) {
         // "There are four cases for the acceptability test for an incoming
         // segment:"
         bool acceptable = false;
-        UNIMPLEMENTED_WARN();
+        //UNIMPLEMENTED_WARN();
+        if (seg_len == 0 && tcp->rcv_wnd == 0) {
+          if (seg_seq == tcp->rcv_nxt) {
+            acceptable = true;
+          }
+        } else if (seg_len == 0 && tcp->rcv_wnd > 0) {
+          if (tcp_seq_le(tcp->rcv_nxt, seg_seq) && 
+              tcp_seq_lt(seg_seq, tcp->rcv_nxt + tcp->rcv_wnd)) {
+            acceptable = true;
+          }
+        } else if (seg_len > 0 && tcp->rcv_wnd > 0) {
+          if ((tcp_seq_le(tcp->rcv_nxt, seg_seq) && tcp_seq_lt(seg_seq, tcp->rcv_nxt + tcp->rcv_wnd)) ||
+              (tcp_seq_le(tcp->rcv_nxt, seg_seq + seg_len - 1) && tcp_seq_lt(seg_seq + seg_len - 1, tcp->rcv_nxt + tcp->rcv_wnd))) {
+            acceptable = true;
+          }
+        } 
 
         // "If an incoming segment is not acceptable, an acknowledgment
         // should be sent in reply (unless the RST bit is set, if so drop
         // the segment and return):"
         if (!acceptable) {
-          UNIMPLEMENTED_WARN();
+          //UNIMPLEMENTED_WARN();
+          if (!tcp_header->rst) {
+            // <SEQ=SND.NXT><ACK=RCV.NXT><CTL=ACK>
+            uint8_t buffer[40];
+            construct_ip_header(buffer, tcp, sizeof(buffer));
+            // tcp
+            TCPHeader *tcp_hdr = (TCPHeader *)&buffer[20];
+            memset(tcp_hdr, 0, 20);
+            tcp_hdr->source = htons(tcp->local_port);
+            tcp_hdr->dest = htons(tcp->remote_port);
+            tcp_hdr->seq = htonl(tcp->snd_nxt);
+            tcp_hdr->ack_seq = htonl(tcp->rcv_nxt);
+            // flags
+            tcp_hdr->doff = 20 / 4;
+            tcp_hdr->ack = 1;
+            // window size
+            tcp_hdr->window = htons(tcp->recv.free_bytes());
+            
+            update_tcp_ip_checksum(buffer);
+            send_packet(buffer, sizeof(buffer));
+            // tcp->push_to_retransmission_queue(buffer, sizeof(buffer), 0);
+            // // start retransmission timer
+            // Retransmission retransmission_fn;
+            // retransmission_fn.fd = pair.first;
+            // TIMERS.add_job(retransmission_fn, current_ts_msec());
+            
+          }else{
+            return;
+          }
         }
 
         // "second check the RST bit,"
@@ -405,11 +540,13 @@ void process_tcp(const IPHeader *ip, const uint8_t *data, size_t size) {
         if (tcp_header->ack) {
           // "if the ACK bit is on"
           // "SYN-RECEIVED STATE"
+          tcp->pop_from_retransmission_queue(seg_ack);
           if (tcp->state == SYN_RCVD) {
             // "If SND.UNA =< SEG.ACK =< SND.NXT then enter ESTABLISHED state
             // and continue processing."
             if (tcp_seq_le(tcp->snd_una, seg_ack) &&
                 tcp_seq_le(seg_ack, tcp->snd_nxt)) {
+              printf("+++++++++++++INTO IT++++++++++++++++\n");
               tcp->set_state(TCPState::ESTABLISHED);
             }
           }
@@ -494,6 +631,11 @@ void process_tcp(const IPHeader *ip, const uint8_t *data, size_t size) {
             tcp_hdr->window = htons(tcp->recv.free_bytes());
             update_tcp_ip_checksum(buffer);
             send_packet(buffer, sizeof(buffer));
+            // tcp->push_to_retransmission_queue(buffer, sizeof(buffer), 0);
+            // // start retransmission timer
+            // Retransmission retransmission_fn;
+            // retransmission_fn.fd = pair.first;
+            // TIMERS.add_job(retransmission_fn, current_ts_msec());
           }
         }
 
@@ -529,7 +671,11 @@ void process_tcp(const IPHeader *ip, const uint8_t *data, size_t size) {
           tcp_hdr->window = htons(tcp->recv.free_bytes());
           update_tcp_ip_checksum(buffer);
           send_packet(buffer, sizeof(buffer));
-
+          // tcp->push_to_retransmission_queue(buffer, sizeof(buffer), 0);
+          // // start retransmission timer
+          // Retransmission retransmission_fn;
+          // retransmission_fn.fd = pair.first;
+          // TIMERS.add_job(retransmission_fn, current_ts_msec());
           if (tcp->state == SYN_RCVD || tcp->state == ESTABLISHED) {
             // Enter the CLOSE-WAIT state
             tcp->set_state(TCPState::CLOSE_WAIT);
@@ -801,6 +947,11 @@ void tcp_connect(int fd, uint32_t dst_addr, uint16_t dst_port) {
 
   update_tcp_ip_checksum(buffer);
   send_packet(buffer, sizeof(buffer));
+  tcp->push_to_retransmission_queue(buffer, sizeof(buffer), 0);
+  // start retransmission timer
+  Retransmission retransmission_fn;
+  retransmission_fn.fd = fd;
+  TIMERS.add_job(retransmission_fn, current_ts_msec());
   return;
 }
 
@@ -870,16 +1021,15 @@ ssize_t tcp_write(int fd, const uint8_t *data, size_t size) {
         // payload
         size_t bytes_read = tcp->send.read(&buffer[40], segment_len);
         // should never fail
-        // printf("+++++++++++++++++++++++++++++++++++\n");
-        // printf("Read %zu bytes from send buffer\n", bytes_read);
-        // printf("Sending segment of len %zu to remote\n", segment_len);
-        // TODO : BUG
-        //assert(bytes_read == segment_len);
-        // 如果assert失败，抛出错误，输出bytes_read和 segment_len
 
 
         update_tcp_ip_checksum(buffer);
         send_packet(buffer, total_length);
+        tcp->push_to_retransmission_queue(buffer, 52, segment_len);
+        // start retransmission timer
+        Retransmission retransmission_fn;
+        retransmission_fn.fd = fd;
+        TIMERS.add_job(retransmission_fn, current_ts_msec());
       }
 
     }
@@ -927,7 +1077,11 @@ void tcp_shutdown(int fd) {
     update_tcp_ip_checksum(buffer);
 
     send_packet(buffer, sizeof(buffer));
-
+    tcp->push_to_retransmission_queue(buffer, sizeof(buffer), 0);
+    // start retransmission timer
+    Retransmission retransmission_fn;
+    retransmission_fn.fd = fd;
+    TIMERS.add_job(retransmission_fn, current_ts_msec());
     tcp->set_state(TCPState::FIN_WAIT_1);
   } else if (tcp->state == TCPState::CLOSE_WAIT) {
     // TODO(step 4: connection termination)
@@ -949,6 +1103,11 @@ void tcp_shutdown(int fd) {
 
     update_tcp_ip_checksum(buffer);
     send_packet(buffer, sizeof(buffer));
+    tcp->push_to_retransmission_queue(buffer, sizeof(buffer), 0);
+    // start retransmission timer
+    Retransmission retransmission_fn;
+    retransmission_fn.fd = fd;
+    TIMERS.add_job(retransmission_fn, current_ts_msec());
     tcp->set_state(TCPState::LAST_ACK);
   }
 }
