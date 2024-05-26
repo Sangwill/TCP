@@ -19,8 +19,8 @@ client_name = 'lwip-client-retransmission'
 spawn(prefix, server_name)
 spawn(prefix, client_name)
 
-timeout = 10
-#from common import timeout
+#timeout = 10
+from common import timeout
 client_stdout = f'{prefix}_{client_name}-stdout.log'
 server_stdout = f'{prefix}_{server_name}-stdout.log'
 for i in range(timeout):

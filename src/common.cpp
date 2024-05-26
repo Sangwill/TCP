@@ -390,6 +390,7 @@ void generate_http_index(const char *test_case=nullptr) {
     return;
   }
   if (strcmp(test_case, "out-of-order") == 0) {
+    printf("OUT OF ORDER\n");
     hello_world_multi_lines(5);
     return;
   }

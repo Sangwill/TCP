@@ -671,6 +671,7 @@ void process_tcp(const IPHeader *ip, const uint8_t *data, size_t size) {
           tcp_hdr->window = htons(tcp->recv.free_bytes());
           update_tcp_ip_checksum(buffer);
           send_packet(buffer, sizeof(buffer));
+          printf("Connection closing\n");
           // tcp->push_to_retransmission_queue(buffer, sizeof(buffer), 0);
           // // start retransmission timer
           // Retransmission retransmission_fn;
@@ -1082,6 +1083,7 @@ void tcp_shutdown(int fd) {
     Retransmission retransmission_fn;
     retransmission_fn.fd = fd;
     TIMERS.add_job(retransmission_fn, current_ts_msec());
+    printf("Connection closing\n");
     tcp->set_state(TCPState::FIN_WAIT_1);
   } else if (tcp->state == TCPState::CLOSE_WAIT) {
     // TODO(step 4: connection termination)

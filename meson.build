@@ -173,7 +173,7 @@ run_target('run-lab-server-nagle',
 
 run_target('run-lwip-client-retransmission',
   depends: [lwip_client],
-  command : [lwip_client, '-l', 'c', '-r', 's', '-p', pcap_path / 'client-retransmission.pcap', '-R', '0.001']
+  command : [lwip_client, '-l', 'c', '-r', 's', '-p', pcap_path / 'client-retransmission.pcap', '-R', '0.4']
 )
 
 run_target('run-lab-server-retransmission',
@@ -240,8 +240,47 @@ root = meson.source_root()
 python3 = import('python').find_installation('python3')
 sudo = find_program('sudo')
 
+test('test3a 3-way handshake (client)',
+    python3,
+    args: [root / 'src/test/test3a_3way_handshake_client.py'],
+    is_parallel : false,
+    timeout: 100)
 
+test('test3b 3-way handshake (server)',
+    python3,
+    args: [root / 'src/test/test3b_3way_handshake_server.py'],
+    is_parallel : false,
+    timeout: 100)
 
+test('test4a http request & response (client)',
+    python3,
+    args: [root / 'src/test/test4a_http_client.py'],
+    is_parallel : false,
+    timeout: 100)
+
+test('test4b http request & response (server)',
+    python3,
+    args: [root / 'src/test/test4b_http_server.py'],
+    is_parallel : false,
+    timeout: 100)
+
+test('test5a connection termination (client)',
+    python3,
+    args: [root / 'src/test/test5a_termination_client.py'],
+    is_parallel : false,
+    timeout: 100)
+
+test('test5b connection termination (server)',
+    python3,
+    args: [root / 'src/test/test5b_termination_server.py'],
+    is_parallel : false,
+    timeout: 100)
+
+test('test6 visit baidu (client) (requires sudo)',
+    sudo,
+    args: ['python3', root / 'src/test/test6_visit_baidu.py'],
+    is_parallel : false,
+    timeout: 100)
 
 test('test7a retransmission (server)',
     python3,
@@ -249,3 +288,8 @@ test('test7a retransmission (server)',
     is_parallel : false,
     timeout: 100)
 
+test('test7b out-of-order (client)',
+    python3,
+    args: [root / 'src/test/test7b_out_of_order_client.py'],
+    is_parallel : false,
+    timeout: 100)
