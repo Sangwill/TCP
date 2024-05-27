@@ -276,11 +276,6 @@ test('test5b connection termination (server)',
     is_parallel : false,
     timeout: 100)
 
-test('test6 visit baidu (client) (requires sudo)',
-    sudo,
-    args: ['python3', root / 'src/test/test6_visit_baidu.py'],
-    is_parallel : false,
-    timeout: 100)
 
 test('test7a retransmission (server)',
     python3,

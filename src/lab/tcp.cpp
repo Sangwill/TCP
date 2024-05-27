@@ -117,6 +117,37 @@ void TCP::retransmission() {
     }
   }
 }
+
+void TCP::push_to_out_of_order_queue(const uint8_t *data, const size_t len, const uint32_t seg_seq) {
+  printf("|* Push Out of Order Queue *|\n");
+  Payload payload = Payload(data, len, seg_seq);
+  out_of_order_queue.push_back(payload);
+  printf("out_of_order queue size = %lu\n", out_of_order_queue.size());
+}
+
+void TCP::reorder(const uint32_t seg_seq) {
+  printf("|* Reorder *|\n");
+  ssize_t index = -1;
+  for (ssize_t i = 0, iEnd = out_of_order_queue.size(); i < iEnd; i++) {
+    Payload payload = out_of_order_queue[i];
+    if (seg_seq == payload.seg_seq) {
+      size_t res = recv.write(payload.data, payload.len, 0);
+      rcv_nxt = rcv_nxt + res;
+      rcv_wnd = recv.free_bytes();
+      index = i;
+      break;
+    }
+  }
+  if (index != -1) {
+    const uint32_t new_seg_seq = out_of_order_queue[index].seg_seq + out_of_order_queue[index].len;
+    out_of_order_queue.erase(out_of_order_queue.begin() + index);
+    printf("out_of_order queue size = %lu\n", out_of_order_queue.size());
+    if (!out_of_order_queue.empty()) {
+      reorder(new_seg_seq);
+    }
+  }
+}
+
 // construct ip header from tcp connection
 void construct_ip_header(uint8_t *buffer, const TCP *tcp,
                          uint16_t total_length) {
@@ -612,9 +643,17 @@ void process_tcp(const IPHeader *ip, const uint8_t *data, size_t size) {
             // appropriate to the current buffer availability.  The total of
             // RCV.NXT and RCV.WND should not be reduced."
             //UNIMPLEMENTED()
-            auto res = tcp->recv.write(payload, seg_len,0);
-            tcp->rcv_nxt += res;
-            tcp->rcv_wnd = tcp->recv.free_bytes();
+            if (tcp->rcv_nxt != seg_seq) {
+              printf("OUT OF ORDER\n");
+              tcp->push_to_out_of_order_queue(payload, seg_len, seg_seq);
+            } else {
+              size_t res = tcp->recv.write(payload, seg_len, 0);
+              tcp->rcv_nxt = tcp->rcv_nxt + res;
+              tcp->rcv_wnd = tcp->recv.free_bytes();
+              if (!tcp->out_of_order_queue.empty()) {
+                tcp->reorder(seg_seq + seg_len);
+              }
+            }
             // "Send an acknowledgment of the form:
             // <SEQ=SND.NXT><ACK=RCV.NXT><CTL=ACK>"
             // UNIMPLEMENTED()

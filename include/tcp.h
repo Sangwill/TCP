@@ -40,6 +40,19 @@ struct Segment {
     start_ms = _start_ms;
   }
 };
+
+struct Payload {
+  uint32_t seg_seq; // sequence number of payload
+  size_t len; // length of payload
+  uint8_t data[MTU]; // payload data
+
+  Payload() { seg_seq = 0; len =  0; }
+  Payload(const uint8_t *_data, const size_t _len, const uint32_t _seg_seq) {
+    seg_seq = _seg_seq;
+    len = _len;
+    memcpy(data, _data, _len);
+  }
+};
 const size_t RECV_BUFF_SIZE = 10240;
 const size_t SEND_BUFF_SIZE = 10240;
 const uint64_t RTO = 200; // ms
@@ -90,6 +103,8 @@ struct TCP {
   std::deque<int> accept_queue;
   std::vector<Segment> retransmission_queue;
 
+
+  std::vector<Payload> out_of_order_queue;
   // slow start and congestion avoidance
   uint32_t cwnd;
   uint32_t ssthresh;
@@ -105,6 +120,12 @@ struct TCP {
 
   // handle retransmission queue
   void retransmission();
+
+  // update out_of_order queue
+  void push_to_out_of_order_queue(const uint8_t *data, const size_t len, const uint32_t seg_seq);
+
+  // handle out_of_order queue
+  void reorder(const uint32_t seg_seq);
 };
 
 extern std::vector<TCP *> tcp_connections;
