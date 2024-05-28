@@ -83,8 +83,23 @@ struct server_handler {
 int main(int argc, char *argv[]) {
   set_ip(server_ip_s, client_ip_s);
   parse_argv(argc, argv);
-
+  bool nagle = false;
+  char *opt = NULL;
+  for (int i = 1; i < argc; ++i) {
+    if (std::string(argv[i]) == "-T") {
+      // 检查-T是否有后续参数
+      if (i + 1 < argc) {
+        opt = argv[i + 1];
+      } else {
+        fprintf(stderr, "Error: -T option requires a value.\n");
+        return 1;
+      }
+    }
+  }
+  if (opt)
+    nagle = true;
   int listen_fd = tcp_socket();
+  set_nagle(nagle,listen_fd);
   tcp_bind(listen_fd, server_ip, 80);
   tcp_listen(listen_fd);
   printf("Listening on 80 port\n");

@@ -105,11 +105,25 @@ struct read_http_response {
 int main(int argc, char *argv[]) {
   set_ip(client_ip_s, server_ip_s);
   parse_argv(argc, argv);
-
+  bool nagle = false;
+  char *opt = NULL;
+  for (int i = 1; i < argc; ++i) {
+    if (std::string(argv[i]) == "-T") {
+      // 检查-T是否有后续参数
+      if (i + 1 < argc) {
+        opt = argv[i + 1];
+      } else {
+        fprintf(stderr, "Error: -T option requires a value.\n");
+        return 1;
+      }
+    }
+  }
+  if (opt)
+    nagle = true;
   // create socket and connect to server port 80
   int tcp_fd = tcp_socket();
   tcp_connect(tcp_fd, server_ip, 80);
-
+  set_nagle(nagle, tcp_fd);
   // always try to read from tcp
   // and write to stdout & file
   FILE *fp = fopen("index.html", "w");

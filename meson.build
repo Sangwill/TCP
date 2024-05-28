@@ -277,6 +277,7 @@ test('test5b connection termination (server)',
     timeout: 100)
 
 
+
 test('test7a retransmission (server)',
     python3,
     args: [root / 'src/test/test7a_retransmission_server.py'],
@@ -286,5 +287,17 @@ test('test7a retransmission (server)',
 test('test7b out-of-order (client)',
     python3,
     args: [root / 'src/test/test7b_out_of_order_client.py'],
+    is_parallel : false,
+    timeout: 100)
+
+test('test8a nagle (server)',
+    python3,
+    args: [root / 'src/test/test8a_nagle_server.py'],
+    is_parallel : false,
+    timeout: 100)
+
+test('test8b no nagle (server)',
+    python3,
+    args: [root / 'src/test/test8b_no_nagle_server.py'],
     is_parallel : false,
     timeout: 100)

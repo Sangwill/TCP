@@ -21,6 +21,25 @@ struct Retransmission {
     }
   }
 };
+
+struct Nagle
+{
+  int fd;
+  size_t operator()(){
+     
+    TCP *tcp = tcp_fds[fd];
+    assert(tcp);
+    if (tcp->nagle_buffer_size!=0) {
+      if (current_ts_msec()-tcp->nagle_timer){
+        tcp->send_nagle();
+        return -1;
+      }
+    } else {
+      return 2000;
+    }
+  }
+};
+
 // some helper functions
 const char *tcp_state_to_string(TCPState state) {
   switch (state) {
@@ -118,34 +137,14 @@ void TCP::retransmission() {
   }
 }
 
-void TCP::push_to_out_of_order_queue(const uint8_t *data, const size_t len, const uint32_t seg_seq) {
+void TCP::push_to_out_of_order_queue(const uint8_t *data, const size_t len, const uint32_t seg_seq, bool fin) {
   printf("|* Push Out of Order Queue *|\n");
-  Payload payload = Payload(data, len, seg_seq);
+  if (fin){
+    printf("PUSING FIN\n");
+  }
+  Payload payload = Payload(data, len, seg_seq,fin);
   out_of_order_queue.push_back(payload);
   printf("out_of_order queue size = %lu\n", out_of_order_queue.size());
-}
-
-void TCP::reorder(const uint32_t seg_seq) {
-  printf("|* Reorder *|\n");
-  ssize_t index = -1;
-  for (ssize_t i = 0, iEnd = out_of_order_queue.size(); i < iEnd; i++) {
-    Payload payload = out_of_order_queue[i];
-    if (seg_seq == payload.seg_seq) {
-      size_t res = recv.write(payload.data, payload.len, 0);
-      rcv_nxt = rcv_nxt + res;
-      rcv_wnd = recv.free_bytes();
-      index = i;
-      break;
-    }
-  }
-  if (index != -1) {
-    const uint32_t new_seg_seq = out_of_order_queue[index].seg_seq + out_of_order_queue[index].len;
-    out_of_order_queue.erase(out_of_order_queue.begin() + index);
-    printf("out_of_order queue size = %lu\n", out_of_order_queue.size());
-    if (!out_of_order_queue.empty()) {
-      reorder(new_seg_seq);
-    }
-  }
 }
 
 // construct ip header from tcp connection
@@ -168,6 +167,64 @@ void update_tcp_ip_checksum(uint8_t *buffer) {
   TCPHeader *tcp_hdr = (TCPHeader *)(buffer + ip_hdr->ip_hl * 4);
   update_tcp_checksum(ip_hdr, tcp_hdr);
   update_ip_checksum(ip_hdr);
+}
+
+void TCP::reorder(const uint32_t seg_seq) {
+  printf("|* Reorder *|\n");
+  ssize_t index = -1;
+  for (ssize_t i = 0, iEnd = out_of_order_queue.size(); i < iEnd; i++) {
+    Payload payload = out_of_order_queue[i];
+    if (payload.fin){
+      if(rcv_nxt==payload.seg_seq+payload.len){
+        set_state(TCPState::CLOSE_WAIT);
+      }
+    }
+    if (seg_seq == payload.seg_seq) {
+      size_t res = recv.write(payload.data, payload.len, 0);
+      rcv_nxt = rcv_nxt + res;
+      rcv_wnd = recv.free_bytes();
+      index = i;
+      break;
+    }
+  }
+  if (index != -1) {
+    const uint32_t new_seg_seq = out_of_order_queue[index].seg_seq + out_of_order_queue[index].len;
+    out_of_order_queue.erase(out_of_order_queue.begin() + index);
+    printf("out_of_order queue size = %lu\n", out_of_order_queue.size());
+    if (!out_of_order_queue.empty()) {
+      reorder(new_seg_seq);
+    }
+  }
+}
+
+
+
+
+
+void TCP::send_nagle(){
+  printf("|* Send Nagle *|\n");
+  size_t segment_len = nagle_buffer_size;
+  if (segment_len>0){
+    uint16_t total_len = 20 + 20 + segment_len;
+    uint8_t buffer[MTU];
+    construct_ip_header(buffer, this, total_len);
+    TCPHeader *tcp_hdr = (TCPHeader *)&buffer[20];
+    memset(tcp_hdr, 0, 20);
+    tcp_hdr->source = htons(local_port);
+    tcp_hdr->dest = htons(remote_port);
+    tcp_hdr->seq = htonl(snd_nxt);
+    snd_nxt += segment_len;
+    tcp_hdr->doff = 20 / 4;
+    tcp_hdr->ack = 1;
+    tcp_hdr->ack_seq = htonl(rcv_nxt);
+    tcp_hdr->window = htons(recv.free_bytes());
+    memcpy(&buffer[40], nagle_buffer, segment_len);
+    memset(nagle_buffer, 0, segment_len);
+    nagle_buffer_size = 0;
+    update_tcp_ip_checksum(buffer);
+    send_packet(buffer, total_len);
+
+  }
 }
 
 uint32_t generate_initial_seq() {
@@ -301,6 +358,7 @@ void process_tcp(const IPHeader *ip, const uint8_t *data, size_t size) {
           // create a new socket for the connection
           int new_fd = tcp_socket();
           TCP *new_tcp = tcp_fds[new_fd];
+          new_tcp->nagle = tcp->nagle;
           tcp->accept_queue.push_back(new_fd);
 
           // initialize
@@ -349,19 +407,21 @@ void process_tcp(const IPHeader *ip, const uint8_t *data, size_t size) {
           send_packet(buffer, sizeof(buffer));
           // "SND.NXT is set to ISS+1 and SND.UNA to ISS.  The connection
           // state should be changed to SYN-RECEIVED."
-
-          new_tcp->push_to_retransmission_queue(buffer, sizeof(buffer), 0);
-          // start retransmission timer
-          Retransmission retransmission_fn;
-          retransmission_fn.fd = new_fd;
-          TIMERS.add_job(retransmission_fn, current_ts_msec());
-          
+          if (!new_tcp->nagle){
+            new_tcp->push_to_retransmission_queue(buffer, sizeof(buffer), 0);
+            // start retransmission timer
+            Retransmission retransmission_fn;
+            retransmission_fn.fd = new_fd;
+            TIMERS.add_job(retransmission_fn, current_ts_msec());
+          }
           new_tcp->snd_nxt = initial_seq + 1;
           new_tcp->snd_una = initial_seq;
           new_tcp->snd_wnd = seg_wnd;
           new_tcp->rcv_wnd = new_tcp->recv.free_bytes();
           new_tcp->snd_wl2 = initial_seq - 1;
           printf("+++++++++++++NOW SEND SYN+ACK TO CLIENT++++++++++++++++\n");
+          // NOTE THAT IF THE DROP RATE TOO HIGH, WHEN CLIENT MAX SYN RETRY REACHED,
+          // CONNECTION WILL TERMINATE
           new_tcp->set_state(TCPState::SYN_RCVD);
           return;
         }
@@ -645,7 +705,7 @@ void process_tcp(const IPHeader *ip, const uint8_t *data, size_t size) {
             //UNIMPLEMENTED()
             if (tcp->rcv_nxt != seg_seq) {
               printf("OUT OF ORDER\n");
-              tcp->push_to_out_of_order_queue(payload, seg_len, seg_seq);
+              tcp->push_to_out_of_order_queue(payload, seg_len, seg_seq,false);
             } else {
               size_t res = tcp->recv.write(payload, seg_len, 0);
               tcp->rcv_nxt = tcp->rcv_nxt + res;
@@ -695,30 +755,51 @@ void process_tcp(const IPHeader *ip, const uint8_t *data, size_t size) {
           // FIN implies PUSH for any segment text not yet delivered to the
           // user."
           //UNIMPLEMENTED();
-          tcp->rcv_nxt = seg_seq + seg_len + 1;
-          uint8_t buffer[40];
-          construct_ip_header(buffer, tcp, sizeof(buffer));
+          // TODO : wait till all the data has been received,then send ack
+          // if fin arrive before data, cannot close
+          // store fin header in buffer, wait some time , check if the ooo buffer
+          // has been cleared
+          //bool out_of_order = true;
+          // if (tcp->rcv_nxt != seg_seq) {
+          //   printf("OUT OF ORDER\n");
+          //   tcp->push_to_out_of_order_queue(payload, seg_len, seg_seq,true);
+          // } else {
+          //   out_of_order = false;
+          // }
+          bool ooo = false;// out of order
+          if (true) {
+            printf("RCV_NXT=%u\n", tcp->rcv_nxt);
+            printf("SEG_SEQ=%u\n", seg_seq);
+            printf("SEG_LEN=%u\n", seg_len);
+            if (tcp->rcv_nxt != seg_seq + seg_len){
+              ooo = true;
+              printf("OUT OF ORDER\n");
+              tcp->push_to_out_of_order_queue(payload, seg_len, seg_seq, true);
+            }
+            tcp->rcv_nxt = seg_seq + seg_len + 1;
+            uint8_t buffer[40];
+            construct_ip_header(buffer, tcp, sizeof(buffer));
 
-          TCPHeader *tcp_hdr = (TCPHeader *)&buffer[20];
-          memset(tcp_hdr, 0, 20);
-          tcp_hdr->source = htons(tcp->local_port);
-          tcp_hdr->dest = htons(tcp->remote_port);
-          tcp_hdr->seq = htonl(tcp->snd_nxt);
-          tcp_hdr->ack_seq = htonl(tcp->rcv_nxt);
-          tcp_hdr->doff = 20 / 4;
-          tcp_hdr->ack = 1;
-          tcp_hdr->window = htons(tcp->recv.free_bytes());
-          update_tcp_ip_checksum(buffer);
-          send_packet(buffer, sizeof(buffer));
-          printf("Connection closing\n");
-          // tcp->push_to_retransmission_queue(buffer, sizeof(buffer), 0);
-          // // start retransmission timer
-          // Retransmission retransmission_fn;
-          // retransmission_fn.fd = pair.first;
-          // TIMERS.add_job(retransmission_fn, current_ts_msec());
+            TCPHeader *tcp_hdr = (TCPHeader *)&buffer[20];
+            memset(tcp_hdr, 0, 20);
+            tcp_hdr->source = htons(tcp->local_port);
+            tcp_hdr->dest = htons(tcp->remote_port);
+            tcp_hdr->seq = htonl(tcp->snd_nxt);
+            tcp_hdr->ack_seq = htonl(tcp->rcv_nxt);
+            tcp_hdr->doff = 20 / 4;
+            tcp_hdr->ack = 1;
+            tcp_hdr->window = htons(tcp->recv.free_bytes());
+            update_tcp_ip_checksum(buffer);
+            send_packet(buffer, sizeof(buffer));
+            printf("Connection closing\n");
+          }
+          // if seg_seq!=rcv_nxt,add into ooo buffer
+
           if (tcp->state == SYN_RCVD || tcp->state == ESTABLISHED) {
             // Enter the CLOSE-WAIT state
-            tcp->set_state(TCPState::CLOSE_WAIT);
+            // until all the data received, enter 
+            if(!ooo)
+              tcp->set_state(TCPState::CLOSE_WAIT);
           } else if (tcp->state == FIN_WAIT_1) {
             // FIN-WAIT-1 STATE
             // "If our FIN has been ACKed (perhaps in this segment), then
@@ -930,6 +1011,10 @@ int tcp_socket() {
   }
 }
 
+void set_nagle(bool nagle, int listen_fd) { 
+  tcp_fds[listen_fd]->nagle = nagle;
+}
+
 void tcp_connect(int fd, uint32_t dst_addr, uint16_t dst_port) {
   TCP *tcp = tcp_fds[fd];
 
@@ -987,11 +1072,13 @@ void tcp_connect(int fd, uint32_t dst_addr, uint16_t dst_port) {
 
   update_tcp_ip_checksum(buffer);
   send_packet(buffer, sizeof(buffer));
+  if (!tcp->nagle){
   tcp->push_to_retransmission_queue(buffer, sizeof(buffer), 0);
   // start retransmission timer
   Retransmission retransmission_fn;
   retransmission_fn.fd = fd;
   TIMERS.add_job(retransmission_fn, current_ts_msec());
+  }
   return;
 }
 
@@ -1017,62 +1104,146 @@ ssize_t tcp_write(int fd, const uint8_t *data, size_t size) {
     // consider mss and send sequence space
     // send sequence space: https://www.rfc-editor.org/rfc/rfc793.html#page-20
     // figure 4 compute the segment length to send
-    while (bytes_to_send) {
+    #ifdef ENABLE_NAGLE
+
+    printf("+++++++++++OPEN NAGLE+++++++++++\n");
+    if (bytes_to_send < NAGLE_SIZE && tcp->nagle) {
+      tcp->nagle_timer = current_ts_msec();
+      size_t bytes_read = tcp->send.read(
+          &tcp->nagle_buffer[tcp->nagle_buffer_size], bytes_to_send);
+      tcp->nagle_buffer_size += bytes_read;
+      Nagle nagle_fn;
+      nagle_fn.fd = fd;
+      TIMERS.add_job(nagle_fn, current_ts_msec());
+      if (tcp->nagle_buffer_size>NAGLE_SIZE){
+        tcp->send_nagle();
+      }else{
+        printf("|* Nagle Saved %zu *|\n", tcp->nagle_buffer_size);
+      }
+    } else {
+      while (bytes_to_send) {
+        //printf("BYTES TO SEND TO REMOTE=%zu \n", bytes_to_send);
+        
+        size_t segment_len =
+          bytes_to_send < tcp->remote_mss ? bytes_to_send : tcp->remote_mss;
+        bytes_to_send -= segment_len;
+        // UNIMPLEMENTED()
+        if (segment_len > 0) {
+          printf("Sending segment of len %zu to remote\n", segment_len);
+          // send data now
+
+          // 20 IP header & 20 TCP header
+          uint16_t total_length = 20 + 20 + segment_len;
+          uint8_t buffer[MTU];
+          construct_ip_header(buffer, tcp, total_length);
+
+          // tcp
+          TCPHeader *tcp_hdr = (TCPHeader *)&buffer[20];
+          memset(tcp_hdr, 0, 20);
+          tcp_hdr->source = htons(tcp->local_port);
+          tcp_hdr->dest = htons(tcp->remote_port);
+          // this segment occupies range:
+          // [snd_nxt, snd_nxt+seg_len)
+          tcp_hdr->seq = htonl(tcp->snd_nxt);
+          tcp->snd_nxt += segment_len;
+          // flags
+          tcp_hdr->doff = 20 / 4; // 20 bytes
+
+          // TODO(step 3: send & receive)
+          // set ack bit and ack_seq
+          tcp_hdr->ack = 1;
+          tcp_hdr->ack_seq = htonl(tcp->rcv_nxt);
+          // TODO(step 3: send & receive)
+          // window size: size of empty bytes in recv buffer
+          tcp_hdr->window = htons(tcp->recv.free_bytes());
+          //UNIMPLEMENTED();
+          //If the urgent flag is set, then SND.UP <- SND.NXT-1 and set the
+          //urgent pointer in the outgoing segments.
+          // if (tcp_hdr->urg){
+          //   tcp_hdr->urg_ptr = htons(tcp->snd_nxt - 1);
+          // }
+          // payload
+          size_t bytes_read = tcp->send.read(&buffer[40], segment_len);
+          // should never fail
+
+
+          update_tcp_ip_checksum(buffer);
+          send_packet(buffer, total_length);
+          if (!tcp->nagle){
+            tcp->push_to_retransmission_queue(buffer, 52, segment_len);
+            // start retransmission timer
+            Retransmission retransmission_fn;
+            retransmission_fn.fd = fd;
+            TIMERS.add_job(retransmission_fn, current_ts_msec());
+          }
+        }
+
+      }
+    }
+    #else
+    printf("NO NAGLE\n");
+    
+      while (bytes_to_send) {
       //printf("BYTES TO SEND TO REMOTE=%zu \n", bytes_to_send);
       
-      size_t segment_len =
-        bytes_to_send < tcp->remote_mss ? bytes_to_send : tcp->remote_mss;
-      bytes_to_send -= segment_len;
-      // UNIMPLEMENTED()
-      if (segment_len > 0) {
-        printf("Sending segment of len %zu to remote\n", segment_len);
-        // send data now
+        size_t segment_len =
+          bytes_to_send < tcp->remote_mss ? bytes_to_send : tcp->remote_mss;
+        bytes_to_send -= segment_len;
+        // UNIMPLEMENTED()
+        if (segment_len > 0) {
+          printf("Sending segment of len %zu to remote\n", segment_len);
+          // send data now
 
-        // 20 IP header & 20 TCP header
-        uint16_t total_length = 20 + 20 + segment_len;
-        uint8_t buffer[MTU];
-        construct_ip_header(buffer, tcp, total_length);
+          // 20 IP header & 20 TCP header
+          uint16_t total_length = 20 + 20 + segment_len;
+          uint8_t buffer[MTU];
+          construct_ip_header(buffer, tcp, total_length);
 
-        // tcp
-        TCPHeader *tcp_hdr = (TCPHeader *)&buffer[20];
-        memset(tcp_hdr, 0, 20);
-        tcp_hdr->source = htons(tcp->local_port);
-        tcp_hdr->dest = htons(tcp->remote_port);
-        // this segment occupies range:
-        // [snd_nxt, snd_nxt+seg_len)
-        tcp_hdr->seq = htonl(tcp->snd_nxt);
-        tcp->snd_nxt += segment_len;
-        // flags
-        tcp_hdr->doff = 20 / 4; // 20 bytes
+          // tcp
+          TCPHeader *tcp_hdr = (TCPHeader *)&buffer[20];
+          memset(tcp_hdr, 0, 20);
+          tcp_hdr->source = htons(tcp->local_port);
+          tcp_hdr->dest = htons(tcp->remote_port);
+          // this segment occupies range:
+          // [snd_nxt, snd_nxt+seg_len)
+          tcp_hdr->seq = htonl(tcp->snd_nxt);
+          tcp->snd_nxt += segment_len;
+          // flags
+          tcp_hdr->doff = 20 / 4; // 20 bytes
 
-        // TODO(step 3: send & receive)
-        // set ack bit and ack_seq
-        tcp_hdr->ack = 1;
-        tcp_hdr->ack_seq = htonl(tcp->rcv_nxt);
-        // TODO(step 3: send & receive)
-        // window size: size of empty bytes in recv buffer
-        tcp_hdr->window = htons(tcp->recv.free_bytes());
-        //UNIMPLEMENTED();
-        //If the urgent flag is set, then SND.UP <- SND.NXT-1 and set the
-        //urgent pointer in the outgoing segments.
-        // if (tcp_hdr->urg){
-        //   tcp_hdr->urg_ptr = htons(tcp->snd_nxt - 1);
-        // }
-        // payload
-        size_t bytes_read = tcp->send.read(&buffer[40], segment_len);
-        // should never fail
+          // TODO(step 3: send & receive)
+          // set ack bit and ack_seq
+          tcp_hdr->ack = 1;
+          tcp_hdr->ack_seq = htonl(tcp->rcv_nxt);
+          // TODO(step 3: send & receive)
+          // window size: size of empty bytes in recv buffer
+          tcp_hdr->window = htons(tcp->recv.free_bytes());
+          //UNIMPLEMENTED();
+          //If the urgent flag is set, then SND.UP <- SND.NXT-1 and set the
+          //urgent pointer in the outgoing segments.
+          // if (tcp_hdr->urg){
+          //   tcp_hdr->urg_ptr = htons(tcp->snd_nxt - 1);
+          // }
+          // payload
+          size_t bytes_read = tcp->send.read(&buffer[40], segment_len);
+          // should never fail
 
 
-        update_tcp_ip_checksum(buffer);
-        send_packet(buffer, total_length);
-        tcp->push_to_retransmission_queue(buffer, 52, segment_len);
-        // start retransmission timer
-        Retransmission retransmission_fn;
-        retransmission_fn.fd = fd;
-        TIMERS.add_job(retransmission_fn, current_ts_msec());
+          update_tcp_ip_checksum(buffer);
+          send_packet(buffer, total_length);
+          if (!tcp->nagle){
+            tcp->push_to_retransmission_queue(buffer, 52, segment_len);
+            // start retransmission timer
+            Retransmission retransmission_fn;
+            retransmission_fn.fd = fd;
+            TIMERS.add_job(retransmission_fn, current_ts_msec());
+          }
+          
+        }
+
       }
-
-    }
+    
+    #endif
     
     
     return res;
@@ -1117,11 +1288,15 @@ void tcp_shutdown(int fd) {
     update_tcp_ip_checksum(buffer);
 
     send_packet(buffer, sizeof(buffer));
+    if (!tcp->nagle){
     tcp->push_to_retransmission_queue(buffer, sizeof(buffer), 0);
     // start retransmission timer
     Retransmission retransmission_fn;
     retransmission_fn.fd = fd;
     TIMERS.add_job(retransmission_fn, current_ts_msec());
+    }
+
+    printf("we are here\n");
     printf("Connection closing\n");
     tcp->set_state(TCPState::FIN_WAIT_1);
   } else if (tcp->state == TCPState::CLOSE_WAIT) {
@@ -1144,11 +1319,13 @@ void tcp_shutdown(int fd) {
 
     update_tcp_ip_checksum(buffer);
     send_packet(buffer, sizeof(buffer));
-    tcp->push_to_retransmission_queue(buffer, sizeof(buffer), 0);
-    // start retransmission timer
-    Retransmission retransmission_fn;
-    retransmission_fn.fd = fd;
-    TIMERS.add_job(retransmission_fn, current_ts_msec());
+    if (!tcp->nagle){
+      tcp->push_to_retransmission_queue(buffer, sizeof(buffer), 0);
+      // start retransmission timer
+      Retransmission retransmission_fn;
+      retransmission_fn.fd = fd;
+      TIMERS.add_job(retransmission_fn, current_ts_msec());
+    }
     tcp->set_state(TCPState::LAST_ACK);
   }
 }

@@ -45,18 +45,22 @@ struct Payload {
   uint32_t seg_seq; // sequence number of payload
   size_t len; // length of payload
   uint8_t data[MTU]; // payload data
-
-  Payload() { seg_seq = 0; len =  0; }
-  Payload(const uint8_t *_data, const size_t _len, const uint32_t _seg_seq) {
+  bool fin; // if fin
+  Payload() {
+    seg_seq = 0;
+    len = 0;
+  }
+  Payload(const uint8_t *_data, const size_t _len, const uint32_t _seg_seq, const bool _fin) {
     seg_seq = _seg_seq;
     len = _len;
+    fin = _fin;
     memcpy(data, _data, _len);
   }
 };
 const size_t RECV_BUFF_SIZE = 10240;
 const size_t SEND_BUFF_SIZE = 10240;
 const uint64_t RTO = 200; // ms
-
+const size_t NAGLE_SIZE = 1300;
 // Transmission Control Block
 // rfc793 Page 10 Section 3.2
 struct TCP {
@@ -103,13 +107,21 @@ struct TCP {
   std::deque<int> accept_queue;
   std::vector<Segment> retransmission_queue;
 
+  uint64_t nagle_timer;
+  size_t nagle_buffer_size;
+  uint8_t nagle_buffer[MTU];
+
+  bool nagle;
 
   std::vector<Payload> out_of_order_queue;
   // slow start and congestion avoidance
   uint32_t cwnd;
   uint32_t ssthresh;
 
-  TCP() { state = TCPState::CLOSED; }
+  TCP() { state = TCPState::CLOSED;
+    nagle = false;
+    nagle_buffer_size = 0;
+  }
 
   // state transition with debug output
   void set_state(TCPState new_state);
@@ -122,10 +134,12 @@ struct TCP {
   void retransmission();
 
   // update out_of_order queue
-  void push_to_out_of_order_queue(const uint8_t *data, const size_t len, const uint32_t seg_seq);
+  void push_to_out_of_order_queue(const uint8_t *data, const size_t len, const uint32_t seg_seq,bool fin);
 
   // handle out_of_order queue
   void reorder(const uint32_t seg_seq);
+
+  void send_nagle();
 };
 
 extern std::vector<TCP *> tcp_connections;
@@ -188,5 +202,8 @@ int tcp_accept(int fd);
 
 // get tcp state
 TCPState tcp_state(int fd);
+
+// set nagle
+void set_nagle(bool nagle,int listen_fd);
 
 #endif
