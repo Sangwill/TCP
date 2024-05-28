@@ -755,17 +755,10 @@ void process_tcp(const IPHeader *ip, const uint8_t *data, size_t size) {
           // FIN implies PUSH for any segment text not yet delivered to the
           // user."
           //UNIMPLEMENTED();
-          // TODO : wait till all the data has been received,then send ack
+          // wait till all the data has been received,then send ack
           // if fin arrive before data, cannot close
           // store fin header in buffer, wait some time , check if the ooo buffer
           // has been cleared
-          //bool out_of_order = true;
-          // if (tcp->rcv_nxt != seg_seq) {
-          //   printf("OUT OF ORDER\n");
-          //   tcp->push_to_out_of_order_queue(payload, seg_len, seg_seq,true);
-          // } else {
-          //   out_of_order = false;
-          // }
           bool ooo = false;// out of order
           if (true) {
             printf("RCV_NXT=%u\n", tcp->rcv_nxt);
@@ -1171,6 +1164,7 @@ ssize_t tcp_write(int fd, const uint8_t *data, size_t size) {
           send_packet(buffer, total_length);
           if (!tcp->nagle){
             tcp->push_to_retransmission_queue(buffer, 52, segment_len);
+            // overflow
             // start retransmission timer
             Retransmission retransmission_fn;
             retransmission_fn.fd = fd;
