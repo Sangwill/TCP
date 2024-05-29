@@ -40,6 +40,7 @@ struct write_response {
       return 1;
     } else {
       // done, closing
+      //while(check_all_sent(fd)==false);
       printf("Closing socket %d\n", fd);
       tcp_close(fd);
       return -1;
@@ -87,7 +88,6 @@ int main(int argc, char *argv[]) {
   char *opt = NULL;
   for (int i = 1; i < argc; ++i) {
     if (std::string(argv[i]) == "-T") {
-      // 检查-T是否有后续参数
       if (i + 1 < argc) {
         opt = argv[i + 1];
       } else {

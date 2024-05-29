@@ -57,6 +57,18 @@ struct Payload {
     memcpy(data, _data, _len);
   }
 };
+
+struct SendItem {
+  uint8_t buffer[MTU];
+  size_t seg_len;
+};
+
+struct RateSample {
+  uint64_t send_time;
+  uint64_t receive_time;
+  size_t payload_len;
+};
+
 const size_t RECV_BUFF_SIZE = 10240;
 const size_t SEND_BUFF_SIZE = 10240;
 const uint64_t RTO = 200; // ms
@@ -113,6 +125,11 @@ struct TCP {
 
   bool nagle;
 
+  uint64_t pacing_timer;
+  std::queue<SendItem> send_queue;
+
+  std::vector<RateSample> rate_sample_queue;
+
   std::vector<Payload> out_of_order_queue;
   // slow start and congestion avoidance
   uint32_t cwnd;
@@ -121,6 +138,7 @@ struct TCP {
   TCP() { state = TCPState::CLOSED;
     nagle = false;
     nagle_buffer_size = 0;
+    pacing_timer = 0;
   }
 
   // state transition with debug output
@@ -140,6 +158,11 @@ struct TCP {
   void reorder(const uint32_t seg_seq);
 
   void send_nagle();
+
+  // send pkt at a fixed rate
+  void send_packet_pace();
+
+  
 };
 
 extern std::vector<TCP *> tcp_connections;
@@ -205,5 +228,7 @@ TCPState tcp_state(int fd);
 
 // set nagle
 void set_nagle(bool nagle,int listen_fd);
+
+bool check_all_sent(int fd);
 
 #endif

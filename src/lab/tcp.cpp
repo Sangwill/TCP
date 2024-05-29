@@ -22,6 +22,20 @@ struct Retransmission {
   }
 };
 
+struct Pace {
+  int fd;
+  size_t operator()() {
+    TCP *tcp = tcp_fds[fd];
+    assert(tcp);
+    if (tcp->send_queue.empty()){
+      return -1;
+    } else {
+      printf("pace packet\n");
+      tcp->send_packet_pace();
+    }
+  }
+};
+
 struct Nagle
 {
   int fd;
@@ -135,6 +149,13 @@ void TCP::retransmission() {
       send_packet(seg.buffer, seg.header_len + seg.body_len);
     }
   }
+}
+
+void TCP::send_packet_pace() {
+  auto send_item = send_queue.front();
+  printf("pace packet send now!\n");
+  send_packet(send_item.buffer, send_item.seg_len);
+  send_queue.pop();
 }
 
 void TCP::push_to_out_of_order_queue(const uint8_t *data, const size_t len, const uint32_t seg_seq, bool fin) {
@@ -1178,10 +1199,11 @@ ssize_t tcp_write(int fd, const uint8_t *data, size_t size) {
     printf("NO NAGLE\n");
     
       while (bytes_to_send) {
-      //printf("BYTES TO SEND TO REMOTE=%zu \n", bytes_to_send);
-      
+        // clear pacing timer
+        tcp->pacing_timer = 0;
+
         size_t segment_len =
-          bytes_to_send < tcp->remote_mss ? bytes_to_send : tcp->remote_mss;
+            bytes_to_send < tcp->remote_mss ? bytes_to_send : tcp->remote_mss;
         bytes_to_send -= segment_len;
         // UNIMPLEMENTED()
         if (segment_len > 0) {
@@ -1224,15 +1246,29 @@ ssize_t tcp_write(int fd, const uint8_t *data, size_t size) {
 
 
           update_tcp_ip_checksum(buffer);
+          // control sending rate
+          SendItem send_item;
+          //send_item.buffer = buffer;
+          memcpy(send_item.buffer, buffer, MTU);
+          send_item.seg_len = total_length;
+          tcp->send_queue.push(send_item);
+          Pace pace_fn;
+          pace_fn.fd = fd;
+          uint64_t wait_time = tcp->send_queue.size() * 10;// send every 10 ms
+          TIMERS.schedule_job(pace_fn, wait_time);
+
+          // NOTE THAT IF ASYNC, AFTER tcp_write FINISHED, SERVER WILL SHUT DOWN
+          // IMMEDIATELY, WHICH MAKES CLIENT CLOSE BEFORE THE PACKET SEND
           send_packet(buffer, total_length);
-          if (!tcp->nagle){
+          usleep(5);
+          printf("current time is %lu\n", current_ts_msec());
+          if (!tcp->nagle) {
             tcp->push_to_retransmission_queue(buffer, 52, segment_len);
             // start retransmission timer
             Retransmission retransmission_fn;
             retransmission_fn.fd = fd;
             TIMERS.add_job(retransmission_fn, current_ts_msec());
           }
-          
         }
 
       }
@@ -1337,6 +1373,12 @@ void tcp_close(int fd) {
     tcp_fds.erase(fd);
     delete tcp;
   }
+}
+
+bool check_all_sent(int fd){
+  TCP *tcp = tcp_fds[fd];
+  assert(tcp);
+  return (tcp->send_queue.size() == 0);
 }
 
 void tcp_bind(int fd, be32_t addr, uint16_t port) {
