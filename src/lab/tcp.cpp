@@ -104,6 +104,17 @@ void TCP::pop_from_retransmission_queue(const uint32_t seg_ack) {
     auto& seg = retransmission_queue[i];
     TCPHeader *tcp_hdr = (TCPHeader *)&seg.buffer[20];
     uint32_t seg_seq = ntohl(tcp_hdr->seq);
+    if (seg_seq==seg_ack){
+      seg.dup_ack_cnt++;
+      printf("seg_seq = %u seg_dup_ack_cnt = %zu\n", seg_seq, seg.dup_ack_cnt);
+      if (seg.dup_ack_cnt==3){
+        for (auto &each:retransmission_queue){
+          if (each.SACKed==false){
+            send_packet(each.buffer, each.header_len + each.body_len);
+          }
+        }
+      }
+    }
     // match packet
     if (0 < seg.body_len) {
       if (seg_seq + seg.body_len == seg_ack) {
@@ -122,17 +133,46 @@ void TCP::pop_from_retransmission_queue(const uint32_t seg_ack) {
     printf("|* Pop Packet *|\n");
     retransmission_queue.erase(retransmission_queue.begin(), retransmission_queue.begin() + index + 1);
   }
+
+  // SACK
+  if (sack){
+    for(ssize_t i = 0, iEnd = retransmission_queue.size(); i < iEnd; i++) {
+      auto& seg = retransmission_queue[i];
+      TCPHeader *tcp_hdr = (TCPHeader *)&seg.buffer[20];
+      uint32_t seg_seq = ntohl(tcp_hdr->seq);
+      for (size_t j = 0; j < 4;j++){
+        if (sack_block[j].left_edge!=0){ // has value
+          if(tcp_seq_le(sack_block[j].left_edge,seg_seq) && tcp_seq_le(seg_seq+seg.body_len,sack_block[j].right_edge)){
+            printf("MARK SACKED\n");
+            seg.SACKed = true;
+          }
+        }
+      }
+    }
+  }
   printf("retransmission queue size = %lu\n", retransmission_queue.size());
 }
 
+// After a retransmit timeout the data sender SHOULD turn off all of the
+// SACKed bits
+// The data sender MUST retransmit the segment at the left
+// edge of the window after a retransmit timeout, whether or not the
+// SACKed bit is on for that segment.
 void TCP::retransmission() {
   uint64_t current_ms = current_ts_msec();
   // printf("current_ms = %llu\n", current_ms);
+  bool timeout = false;
   for (auto seg : retransmission_queue) {
     // printf("start_ms = %llu\n", seg.start_ms);
     if (RTO + seg.start_ms < current_ms) {
+      timeout = true;
       printf("|* Retransmission *|\n");
       send_packet(seg.buffer, seg.header_len + seg.body_len);
+    }
+  }
+  if (timeout){
+    for (auto &seg : retransmission_queue){
+      seg.SACKed = false;
     }
   }
 }
@@ -299,6 +339,7 @@ void process_tcp(const IPHeader *ip, const uint8_t *data, size_t size) {
         // check TCP option header: MSS
         uint8_t *opt_ptr = (uint8_t *)data + 20;
         uint8_t *opt_end = (uint8_t *)data + tcp_header->doff * 4;
+        printf("opt len=%d\n", *opt_end-*opt_ptr);
         while (opt_ptr < opt_end) {
           if (*opt_ptr == 0x00) {
             // End Of Option List
@@ -320,6 +361,40 @@ void process_tcp(const IPHeader *ip, const uint8_t *data, size_t size) {
               printf("Remote MSS is %d\n", mss);
             } else {
               printf("Remote sent MSS option header in !SYN packet\n");
+            }
+            opt_ptr += len;
+          } else if (*opt_ptr==0x04){
+            // SACK permitted
+            uint8_t len = opt_ptr[1];
+            if (len != 2){
+              printf("Bad TCP option len: %d\n", len);
+              break;
+            }
+            if (tcp_header->syn){
+              printf("enable SACK\n");
+              tcp->sack = true;
+            } else {
+              printf("Remote sent SACK permit option header in !SYN packet\n");
+            }
+            opt_ptr += len;
+          } else if (*opt_ptr==0x05){
+            uint8_t len = opt_ptr[1];
+            size_t block_count = (len - 2) / 4;
+            uint32_t edge[8]={0};
+            if (block_count) {
+              for (size_t i = 0; i < block_count;i++){
+                uint32_t seq = ((uint32_t)opt_ptr[2 + 4 * i] << 24) +
+                               ((uint32_t)opt_ptr[2 + 4 * i + 1] << 16) +
+                               ((uint32_t)opt_ptr[2 + 4 * i + 2] << 8) +
+                               (uint32_t)opt_ptr[2 + 4 * i + 3];
+                edge[i] = seq;
+              }
+            }
+            for (int i = 0; i < 4;i++){
+              tcp->sack_block[i].left_edge = edge[2 * i];
+              printf("left=%u\n", edge[2 * i]);
+              tcp->sack_block[i].right_edge = edge[2 * i + 1];
+              printf("right=%u\n", edge[2 * i + 1]);
             }
             opt_ptr += len;
           } else {
@@ -360,7 +435,38 @@ void process_tcp(const IPHeader *ip, const uint8_t *data, size_t size) {
           TCP *new_tcp = tcp_fds[new_fd];
           new_tcp->nagle = tcp->nagle;
           tcp->accept_queue.push_back(new_fd);
-
+          // TODO :enable sack
+          if(tcp_header->doff > 20 / 4){
+            uint8_t *opt_ptr = (uint8_t *)data + 20;
+            uint8_t *opt_end = (uint8_t *)data + tcp_header->doff * 4;
+            while (opt_ptr < opt_end) {
+              if (*opt_ptr == 0x00) {
+                // End Of Option List
+                break;
+              } else if (*opt_ptr == 0x01) {
+                // No-Operation
+                opt_ptr++;
+              } else if (*opt_ptr==0x04){
+                // SACK permitted
+                uint8_t len = opt_ptr[1];
+                if (len != 2){
+                  printf("Bad TCP option len: %d\n", len);
+                  break;
+                }
+                if (tcp_header->syn){
+                  printf("Enable SACK\n");
+                  tcp->sack = true;
+                } else {
+                  printf("Remote sent SACK permit option header in !SYN packet\n");
+                }
+                opt_ptr += len;
+              } else {
+                printf("Unrecognized TCP option: %d\n", *opt_ptr);
+                break;
+              }
+            }
+          }
+          
           // initialize
           new_tcp->local_ip = tcp->local_ip;
           new_tcp->remote_ip = ip->ip_src;
@@ -632,6 +738,8 @@ void process_tcp(const IPHeader *ip, const uint8_t *data, size_t size) {
           // "if the ACK bit is on"
           // "SYN-RECEIVED STATE"
           tcp->pop_from_retransmission_queue(seg_ack);
+          // use sack block to mark packet that has been received
+
           if (tcp->state == SYN_RCVD) {
             // "If SND.UNA =< SEG.ACK =< SND.NXT then enter ESTABLISHED state
             // and continue processing."
@@ -717,7 +825,7 @@ void process_tcp(const IPHeader *ip, const uint8_t *data, size_t size) {
             // "Send an acknowledgment of the form:
             // <SEQ=SND.NXT><ACK=RCV.NXT><CTL=ACK>"
             // UNIMPLEMENTED()
-            uint8_t buffer[40];
+            uint8_t buffer[40 + 10 + 2]; // 2byte pad
             construct_ip_header(buffer, tcp, sizeof(buffer));
             TCPHeader *tcp_hdr = (TCPHeader *)&buffer[20];
             memset(tcp_hdr, 0, 20);
@@ -725,9 +833,22 @@ void process_tcp(const IPHeader *ip, const uint8_t *data, size_t size) {
             tcp_hdr->dest = htons(tcp->remote_port);
             tcp_hdr->ack_seq = htonl(tcp->rcv_nxt);
             tcp_hdr->seq = htonl(tcp->snd_nxt);
-            tcp_hdr->doff = 20 / 4;
+            tcp_hdr->doff = 32 / 4;
             tcp_hdr->ack = 1;
             tcp_hdr->window = htons(tcp->recv.free_bytes());
+            buffer[40] = 0x05;
+            buffer[41] = 0xa;
+            uint32_t left_edge = seg_seq;
+            uint32_t right_edge = seg_seq + seg_len;
+            buffer[42] = left_edge >> 24;
+            buffer[43] = left_edge >> 16;
+            buffer[44] = left_edge >> 8;
+            buffer[45] = left_edge;
+            buffer[46] = right_edge >> 24;
+            buffer[47] = right_edge >> 16;
+            buffer[48] = right_edge >> 8;
+            buffer[49] = right_edge;
+            buffer[50] = buffer[51] = 0x0;
             update_tcp_ip_checksum(buffer);
             send_packet(buffer, sizeof(buffer));
             // tcp->push_to_retransmission_queue(buffer, sizeof(buffer), 0);
@@ -885,7 +1006,7 @@ void update_tcp_checksum(const IPHeader *ip, TCPHeader *tcp) {
     checksum +=
         (((uint32_t)pseudo_header[i * 2]) << 8) + pseudo_header[i * 2 + 1];
   }
-
+  
   // "The checksum field is the 16 bit one's complement of the one's
   // complement sum of all 16 bit words in the header and text."
 
@@ -1038,7 +1159,7 @@ void tcp_connect(int fd, uint32_t dst_addr, uint16_t dst_port) {
   // send SYN to remote
   // 44 = 20(IP) + 24(TCP)
   // with 4 bytes option(MSS)
-  uint8_t buffer[44];
+  uint8_t buffer[44 + 2 + 2];
   construct_ip_header(buffer, tcp, sizeof(buffer));
 
   // tcp
@@ -1048,7 +1169,7 @@ void tcp_connect(int fd, uint32_t dst_addr, uint16_t dst_port) {
   tcp_hdr->dest = htons(tcp->remote_port);
   tcp_hdr->seq = htonl(initial_seq);
   // flags
-  tcp_hdr->doff = 24 / 4; // 24 bytes
+  tcp_hdr->doff = 28 / 4; // 26 bytes + 2 bytes padding
   tcp_hdr->syn = 1;
 
   // TODO(step 3: send & receive)
@@ -1062,6 +1183,11 @@ void tcp_connect(int fd, uint32_t dst_addr, uint16_t dst_port) {
   buffer[41] = 0x04; // length
   buffer[42] = tcp->local_mss >> 8;
   buffer[43] = tcp->local_mss;
+
+  //sack
+  buffer[44] = 0x04;
+  buffer[45] = 0x02;
+  buffer[46] = buffer[47] = 0x0;
 
   update_tcp_ip_checksum(buffer);
   send_packet(buffer, sizeof(buffer));
@@ -1224,6 +1350,7 @@ ssize_t tcp_write(int fd, const uint8_t *data, size_t size) {
 
 
           update_tcp_ip_checksum(buffer);
+        
           send_packet(buffer, total_length);
           if (!tcp->nagle){
             tcp->push_to_retransmission_queue(buffer, 52, segment_len);

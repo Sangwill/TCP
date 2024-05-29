@@ -32,12 +32,17 @@ struct Segment {
   size_t body_len; // segment body length
   uint8_t buffer[MTU]; // segment data (< MTU bytes)
   uint64_t start_ms; // the time when segment push to the retransmission queue
-
-  Segment(const uint8_t *_buffer, const size_t _header_len, const size_t _body_len, const uint64_t _start_ms) {
+  size_t dup_ack_cnt; // the duplicate ACK count 
+  bool SACKed;
+  Segment(const uint8_t *_buffer, const size_t _header_len,
+          const size_t _body_len, const uint64_t _start_ms) {
     header_len = _header_len;
     body_len = _body_len;
     memcpy(buffer, _buffer, _header_len + _body_len);
     start_ms = _start_ms;
+    SACKed = false;
+    dup_ack_cnt = 0;
+
   }
 };
 
@@ -57,6 +62,13 @@ struct Payload {
     memcpy(data, _data, _len);
   }
 };
+
+struct Block
+{
+  uint32_t left_edge;
+  uint32_t right_edge;
+};
+
 const size_t RECV_BUFF_SIZE = 10240;
 const size_t SEND_BUFF_SIZE = 10240;
 const uint64_t RTO = 200; // ms
@@ -112,6 +124,9 @@ struct TCP {
   uint8_t nagle_buffer[MTU];
 
   bool nagle;
+  bool sack;
+  //if edge == 0, this block is empty
+  Block sack_block[4];
 
   std::vector<Payload> out_of_order_queue;
   // slow start and congestion avoidance
@@ -121,6 +136,7 @@ struct TCP {
   TCP() { state = TCPState::CLOSED;
     nagle = false;
     nagle_buffer_size = 0;
+    sack = false;
   }
 
   // state transition with debug output
