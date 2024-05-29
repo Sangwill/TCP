@@ -147,6 +147,7 @@ void TCP::retransmission() {
     if (RTO + seg.start_ms < current_ms) {
       printf("|* Retransmission *|\n");
       send_packet(seg.buffer, seg.header_len + seg.body_len);
+      sample.payload_len += seg.body_len;
     }
   }
 }
@@ -665,9 +666,20 @@ void process_tcp(const IPHeader *ip, const uint8_t *data, size_t size) {
 
           // "ESTABLISHED STATE"
           if (tcp->state == ESTABLISHED) {
+            auto rtt = (current_ts_msec() - tcp->sample.send_time)/1e6;
+            printf("RTT:%lu s\n", rtt);
+            uint64_t wtime;
+            if (tcp->sample.receive_time==0){
+              wtime = rtt;
+            } else {
+              wtime = current_ts_msec() - tcp->sample.receive_time;
+            }
+            tcp->sample.receive_time = current_ts_msec();
+            printf("rate:%lu bytes per s\n", tcp->sample.payload_len / wtime);
+            tcp->sample.payload_len = 0;
             // TODO(step 3: send & receive)
             // "If SND.UNA < SEG.ACK =< SND.NXT then, set SND.UNA <- SEG.ACK."
-            //UNIMPLEMENTED()
+            // UNIMPLEMENTED()
             if (tcp_seq_lt(tcp->snd_una,seg_ack) && tcp_seq_le(seg_ack,tcp->snd_nxt)){
               tcp->snd_una = seg_ack;
             }
@@ -1183,7 +1195,8 @@ ssize_t tcp_write(int fd, const uint8_t *data, size_t size) {
 
           update_tcp_ip_checksum(buffer);
           send_packet(buffer, total_length);
-          if (!tcp->nagle){
+          tcp->sample.payload_len += segment_len;
+          if (!tcp->nagle) {
             tcp->push_to_retransmission_queue(buffer, 52, segment_len);
             // overflow
             // start retransmission timer
@@ -1260,6 +1273,7 @@ ssize_t tcp_write(int fd, const uint8_t *data, size_t size) {
           // NOTE THAT IF ASYNC, AFTER tcp_write FINISHED, SERVER WILL SHUT DOWN
           // IMMEDIATELY, WHICH MAKES CLIENT CLOSE BEFORE THE PACKET SEND
           send_packet(buffer, total_length);
+          tcp->sample.payload_len += segment_len;
           usleep(5);
           printf("current time is %lu\n", current_ts_msec());
           if (!tcp->nagle) {

@@ -128,7 +128,7 @@ struct TCP {
   uint64_t pacing_timer;
   std::queue<SendItem> send_queue;
 
-  std::vector<RateSample> rate_sample_queue;
+  RateSample sample;
 
   std::vector<Payload> out_of_order_queue;
   // slow start and congestion avoidance
