@@ -27,17 +27,26 @@ enum TCPState {
   TIME_WAIT,
   CLOSED,
 };
+
+enum RenoState {
+  SLOW_START,
+  CONGESTION_AVOIDANCE,
+  FAST_RECOVERY,
+};
+
 struct Segment {
   size_t header_len; // segment header length
   size_t body_len; // segment body length
   uint8_t buffer[MTU]; // segment data (< MTU bytes)
   uint64_t start_ms; // the time when segment push to the retransmission queue
-
-  Segment(const uint8_t *_buffer, const size_t _header_len, const size_t _body_len, const uint64_t _start_ms) {
+  size_t dup_ack_cnt;
+  Segment(const uint8_t *_buffer, const size_t _header_len,
+          const size_t _body_len, const uint64_t _start_ms) {
     header_len = _header_len;
     body_len = _body_len;
     memcpy(buffer, _buffer, _header_len + _body_len);
     start_ms = _start_ms;
+    dup_ack_cnt = 0;
   }
 };
 
@@ -112,15 +121,23 @@ struct TCP {
   uint8_t nagle_buffer[MTU];
 
   bool nagle;
-
+  // reno state
+  RenoState reno_state;
   std::vector<Payload> out_of_order_queue;
   // slow start and congestion avoidance
   uint32_t cwnd;
   uint32_t ssthresh;
 
-  TCP() { state = TCPState::CLOSED;
-    nagle = false;
-    nagle_buffer_size = 0;
+  uint32_t delta_cwnd;
+
+  uint32_t recovery_ack;
+
+  TCP() { 
+      state = TCPState::CLOSED;
+      reno_state = RenoState::SLOW_START; 
+      nagle = false;
+      nagle_buffer_size = 0;
+      delta_cwnd = 0;
   }
 
   // state transition with debug output
@@ -140,6 +157,11 @@ struct TCP {
   void reorder(const uint32_t seg_seq);
 
   void send_nagle();
+
+  void set_reno_state(RenoState new_state);
+
+  // clear dup_ack_cnt
+  void clear_dup_ack_cnt();
 };
 
 extern std::vector<TCP *> tcp_connections;

@@ -266,6 +266,9 @@ ssize_t recv_packet(uint8_t *buffer, size_t buffer_size) {
       switch (tps_control_mode) {
         case TPSControlMode::Fixed:
           // drop packet if the throughput is higher than MAX_TPS
+          if ((bytes_recv + size) * 1000 > (now - first_packet_time) * MAX_TPS){
+            printf("DROP PACKET...\n");
+          }
           return (bytes_recv + size) * 1000 > (now - first_packet_time) * MAX_TPS;
         case TPSControlMode::Random:
           // drop packet with probability 0.1 if the throughput is higher than MAX_TPS

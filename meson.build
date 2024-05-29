@@ -229,75 +229,22 @@ test1_seq_compare = executable('test1-seq-compare',
             include_directories: incdir)
 test('test1 seq comparison', test1_seq_compare, timeout: 100)
 
-test2_initial_seq = executable('test2-initial-seq',
-            lab_sources,
-            common_sources,
-            'src/test/test2_initial_seq.cpp',
-            include_directories: incdir)
-test('test2 initial seq generation', test2_initial_seq, timeout: 100)
 
 root = meson.source_root()
 python3 = import('python').find_installation('python3')
 sudo = find_program('sudo')
 
-test('test3a 3-way handshake (client)',
+
+
+
+test('test9a cong avoid (server)',
     python3,
-    args: [root / 'src/test/test3a_3way_handshake_client.py'],
+    args: [root / 'src/test/test9a_cong_avoid_server.py'],
     is_parallel : false,
     timeout: 100)
 
-test('test3b 3-way handshake (server)',
+test('test9b cong avoid (server)',
     python3,
-    args: [root / 'src/test/test3b_3way_handshake_server.py'],
-    is_parallel : false,
-    timeout: 100)
-
-test('test4a http request & response (client)',
-    python3,
-    args: [root / 'src/test/test4a_http_client.py'],
-    is_parallel : false,
-    timeout: 100)
-
-test('test4b http request & response (server)',
-    python3,
-    args: [root / 'src/test/test4b_http_server.py'],
-    is_parallel : false,
-    timeout: 100)
-
-test('test5a connection termination (client)',
-    python3,
-    args: [root / 'src/test/test5a_termination_client.py'],
-    is_parallel : false,
-    timeout: 100)
-
-test('test5b connection termination (server)',
-    python3,
-    args: [root / 'src/test/test5b_termination_server.py'],
-    is_parallel : false,
-    timeout: 100)
-
-
-
-test('test7a retransmission (server)',
-    python3,
-    args: [root / 'src/test/test7a_retransmission_server.py'],
-    is_parallel : false,
-    timeout: 100)
-
-test('test7b out-of-order (client)',
-    python3,
-    args: [root / 'src/test/test7b_out_of_order_client.py'],
-    is_parallel : false,
-    timeout: 100)
-
-test('test8a nagle (server)',
-    python3,
-    args: [root / 'src/test/test8a_nagle_server.py'],
-    is_parallel : false,
-    timeout: 100)
-
-test('test8b no nagle (server)',
-    python3,
-    args: [root / 'src/test/test8b_no_nagle_server.py'],
+    args: [root / 'src/test/test9b_cong_avoid_server.py'],
     is_parallel : false,
     timeout: 100)

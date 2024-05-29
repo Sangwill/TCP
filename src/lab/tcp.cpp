@@ -78,6 +78,29 @@ void TCP::set_state(TCPState new_state) {
   fflush(stdout);
   state = new_state;
 }
+
+const char *tcp_reno_state_to_string(RenoState state) {
+  switch (state) {
+  case RenoState::SLOW_START:
+    return "SLOW_START";
+  case RenoState::CONGESTION_AVOIDANCE:
+    return "CONGESTION_AVOIDANCE";
+  case RenoState::FAST_RECOVERY:
+    return "FAST_RECOVERY";
+  default:
+    printf("Invalid TCPState\n");
+    exit(1);
+  }
+}
+
+void TCP::set_reno_state(RenoState new_state) {
+  // for unit tests
+  printf("TCP Reno state transitioned from %s to %s\n", tcp_reno_state_to_string(reno_state),
+         tcp_reno_state_to_string(new_state));
+  fflush(stdout);
+  reno_state = new_state;
+}
+
 // update retransmission queue
 void TCP::push_to_retransmission_queue(const uint8_t *buffer, const size_t header_len, const size_t body_len) {
   TCPHeader *tcp_hdr = (TCPHeader *)&buffer[20];
@@ -104,6 +127,26 @@ void TCP::pop_from_retransmission_queue(const uint32_t seg_ack) {
     auto& seg = retransmission_queue[i];
     TCPHeader *tcp_hdr = (TCPHeader *)&seg.buffer[20];
     uint32_t seg_seq = ntohl(tcp_hdr->seq);
+     if (seg_seq == seg_ack) {
+      if (reno_state == RenoState::SLOW_START ||
+          reno_state == RenoState::CONGESTION_AVOIDANCE) {
+        // dupACKcount++
+        seg.dup_ack_cnt++;
+        printf("seg_seq = %u seg_dup_ack_cnt = %zu\n", seg_seq, seg.dup_ack_cnt);
+        // when duplicate ACKs count == 3
+        if (seg.dup_ack_cnt == 3) {
+          set_reno_state(RenoState::FAST_RECOVERY);
+          // ssthresh = cwnd / 2; cwnd = ssthresh + 3 * MSS
+          ssthresh = cwnd >> 1;
+          cwnd = ssthresh + 3 * DEFAULT_MSS;
+          // retransmit missing segment
+          send_packet(seg.buffer, seg.header_len + seg.body_len);
+        }
+      } else {
+        // cwnd = cwnd + MSS
+        cwnd += DEFAULT_MSS;
+      }
+    }
     // match packet
     if (0 < seg.body_len) {
       if (seg_seq + seg.body_len == seg_ack) {
@@ -121,8 +164,36 @@ void TCP::pop_from_retransmission_queue(const uint32_t seg_ack) {
   if (index != -1) {
     printf("|* Pop Packet *|\n");
     retransmission_queue.erase(retransmission_queue.begin(), retransmission_queue.begin() + index + 1);
+    if (state != TCPState::SYN_SENT && state != TCPState::SYN_RCVD) {
+      // update cwnd
+      if (reno_state == RenoState::SLOW_START) {
+        cwnd += DEFAULT_MSS;
+        printf("slow start: cwnd = %u ssthresh = %u\n", cwnd, ssthresh);
+        if (cwnd == ssthresh) {
+          set_reno_state(RenoState::CONGESTION_AVOIDANCE);
+        }
+      } else if (reno_state == RenoState::CONGESTION_AVOIDANCE) {
+        delta_cwnd += DEFAULT_MSS;
+        if (delta_cwnd == cwnd) {
+          cwnd += DEFAULT_MSS;
+          delta_cwnd = 0;
+          printf("congestion avoidance: cwnd = %u ssthresh = %u\n", cwnd, ssthresh); 
+        }
+      } else {
+        cwnd = ssthresh;
+        set_reno_state(RenoState::CONGESTION_AVOIDANCE);
+      }
+      // dupACKcount = 0
+      clear_dup_ack_cnt();
+    }
   }
   printf("retransmission queue size = %lu\n", retransmission_queue.size());
+}
+
+void TCP::clear_dup_ack_cnt() {
+  for (auto seg : retransmission_queue) {
+    seg.dup_ack_cnt = 0;
+  }
 }
 
 void TCP::retransmission() {
@@ -132,6 +203,13 @@ void TCP::retransmission() {
     // printf("start_ms = %llu\n", seg.start_ms);
     if (RTO + seg.start_ms < current_ms) {
       printf("|* Retransmission *|\n");
+      printf("|* Retransmission Packet *|\n");
+      set_reno_state(RenoState::SLOW_START);
+      // cwnd = MSS; ssthresh = cwnd / 2;
+      ssthresh = cwnd >> 1;
+      cwnd = DEFAULT_MSS;
+      // dupACKcount = 0
+      clear_dup_ack_cnt();
       send_packet(seg.buffer, seg.header_len + seg.body_len);
     }
   }
@@ -1099,7 +1177,6 @@ ssize_t tcp_write(int fd, const uint8_t *data, size_t size) {
     // figure 4 compute the segment length to send
     #ifdef ENABLE_NAGLE
 
-    printf("+++++++++++OPEN NAGLE+++++++++++\n");
     if (bytes_to_send < NAGLE_SIZE && tcp->nagle) {
       tcp->nagle_timer = current_ts_msec();
       size_t bytes_read = tcp->send.read(
@@ -1179,9 +1256,12 @@ ssize_t tcp_write(int fd, const uint8_t *data, size_t size) {
     
       while (bytes_to_send) {
       //printf("BYTES TO SEND TO REMOTE=%zu \n", bytes_to_send);
-      
+        size_t send_sequence_space = tcp->snd_una + tcp->snd_wnd - tcp->snd_nxt;
         size_t segment_len =
-          bytes_to_send < tcp->remote_mss ? bytes_to_send : tcp->remote_mss;
+            bytes_to_send < tcp->remote_mss ? bytes_to_send : tcp->remote_mss;
+        segment_len = send_sequence_space < segment_len ? send_sequence_space
+                                                        : segment_len;
+        segment_len = tcp->cwnd < segment_len ? tcp->cwnd : segment_len;
         bytes_to_send -= segment_len;
         // UNIMPLEMENTED()
         if (segment_len > 0) {

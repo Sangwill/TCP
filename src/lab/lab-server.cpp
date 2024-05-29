@@ -74,7 +74,9 @@ struct server_handler {
         }
       }
     }
-
+    else {
+      printf("no data\n");
+    }
     // next data
     return 100;
   }
@@ -125,6 +127,7 @@ int main(int argc, char *argv[]) {
   uint8_t buffer[buffer_size];
   while (1) {
     ssize_t size = recv_packet(buffer, buffer_size);
+    //printf("recv pkt\n");
     if (size >= 0) {
       // got data
       process_ip(buffer, size);
