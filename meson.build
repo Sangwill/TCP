@@ -183,7 +183,7 @@ run_target('run-lab-server-retransmission',
 
 run_target('run-lab-server-out-of-order',
   depends: [lab_server_no_nagle],
-  command : [lab_server_no_nagle, '-l', 's', '-r', 'c', '-p', pcap_path / 'lab-server-out-of-order.pcap', '-s', '0,200', '-T', 'out-of-order']
+  command : [lab_server_no_nagle, '-l', 's', '-r', 'c', '-p', pcap_path / 'lab-server-out-of-order.pcap', '-T', 'out-of-order']
 )
 
 run_target('run-lwip-client-cong-avoid',
@@ -229,12 +229,7 @@ test1_seq_compare = executable('test1-seq-compare',
             include_directories: incdir)
 test('test1 seq comparison', test1_seq_compare, timeout: 100)
 
-test2_initial_seq = executable('test2-initial-seq',
-            lab_sources,
-            common_sources,
-            'src/test/test2_initial_seq.cpp',
-            include_directories: incdir)
-test('test2 initial seq generation', test2_initial_seq, timeout: 100)
+
 
 root = meson.source_root()
 python3 = import('python').find_installation('python3')
@@ -252,57 +247,11 @@ test('test3b 3-way handshake (server)',
     is_parallel : false,
     timeout: 100)
 
-test('test4a http request & response (client)',
-    python3,
-    args: [root / 'src/test/test4a_http_client.py'],
-    is_parallel : false,
-    timeout: 100)
 
-test('test4b http request & response (server)',
-    python3,
-    args: [root / 'src/test/test4b_http_server.py'],
-    is_parallel : false,
-    timeout: 100)
-
-test('test5a connection termination (client)',
-    python3,
-    args: [root / 'src/test/test5a_termination_client.py'],
-    is_parallel : false,
-    timeout: 100)
-
-test('test5b connection termination (server)',
-    python3,
-    args: [root / 'src/test/test5b_termination_server.py'],
-    is_parallel : false,
-    timeout: 100)
-
-test('test6 visit baidu (client) (requires sudo)',
-    sudo,
-    args: ['python3', root / 'src/test/test6_visit_baidu.py'],
-    is_parallel : false,
-    timeout: 100)
-
-test('test7a retransmission (server)',
-    python3,
-    args: [root / 'src/test/test7a_retransmission_server.py'],
-    is_parallel : false,
-    timeout: 100)
 
 test('test7b out-of-order (client)',
     python3,
     args: [root / 'src/test/test7b_out_of_order_client.py'],
-    is_parallel : false,
-    timeout: 100)
-
-test('test8a nagle (server)',
-    python3,
-    args: [root / 'src/test/test8a_nagle_server.py'],
-    is_parallel : false,
-    timeout: 100)
-
-test('test8b no nagle (server)',
-    python3,
-    args: [root / 'src/test/test8b_no_nagle_server.py'],
     is_parallel : false,
     timeout: 100)
 

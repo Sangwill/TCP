@@ -391,7 +391,7 @@ void generate_http_index(const char *test_case=nullptr) {
   }
   if (strcmp(test_case, "out-of-order") == 0) {
     printf("OUT OF ORDER\n");
-    hello_world_multi_lines(5);
+    hello_world_multi_lines(50);
     return;
   }
   if (strcmp(test_case, "cong-avoid-client") == 0) {

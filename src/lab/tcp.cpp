@@ -666,16 +666,20 @@ void process_tcp(const IPHeader *ip, const uint8_t *data, size_t size) {
 
           // "ESTABLISHED STATE"
           if (tcp->state == ESTABLISHED) {
-            auto rtt = (current_ts_msec() - tcp->sample.send_time)/1e6;
-            printf("RTT:%lu s\n", rtt);
+            auto rtt = (current_ts_msec() - tcp->sample.send_time);
+            printf("RTT:%lu ms\n", rtt);
             uint64_t wtime;
             if (tcp->sample.receive_time==0){
               wtime = rtt;
             } else {
               wtime = current_ts_msec() - tcp->sample.receive_time;
             }
-            tcp->sample.receive_time = current_ts_msec();
-            printf("rate:%lu bytes per s\n", tcp->sample.payload_len / wtime);
+            if(wtime){
+              printf("wtime= %lu\n", wtime);
+              tcp->sample.receive_time = current_ts_msec();
+              double rate = (double)tcp->sample.payload_len / (double)wtime;
+              printf("rate:%f bytes per ms\n", rate);
+            }
             tcp->sample.payload_len = 0;
             // TODO(step 3: send & receive)
             // "If SND.UNA < SEG.ACK =< SND.NXT then, set SND.UNA <- SEG.ACK."
