@@ -1274,7 +1274,11 @@ ssize_t tcp_write(int fd, const uint8_t *data, size_t size) {
           // IMMEDIATELY, WHICH MAKES CLIENT CLOSE BEFORE THE PACKET SEND
           send_packet(buffer, total_length);
           tcp->sample.payload_len += segment_len;
-          usleep(5);
+          auto start_time = current_ts_msec();
+          while (true) {
+          auto now_time = current_ts_msec();
+          if (now_time-start_time>= 10)break;
+          }
           printf("current time is %lu\n", current_ts_msec());
           if (!tcp->nagle) {
             tcp->push_to_retransmission_queue(buffer, 52, segment_len);
