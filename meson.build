@@ -178,7 +178,7 @@ run_target('run-lwip-client-retransmission',
 
 run_target('run-lab-server-retransmission',
   depends: [lab_server_no_nagle],
-  command : [lab_server_no_nagle, '-l', 's', '-r', 'c', '-p', pcap_path / 'lab-server-retransmission.pcap']
+  command : [lab_server_no_nagle, '-l', 's', '-r', 'c', '-p', pcap_path / 'lab-server-retransmission.pcap', '-S', '0.4']
 )
 
 run_target('run-lab-server-out-of-order',
@@ -252,7 +252,11 @@ test('test3b 3-way handshake (server)',
     is_parallel : false,
     timeout: 100)
 
-
+test('test7a retransmission (server)',
+    python3,
+    args: [root / 'src/test/test7a_retransmission_server.py'],
+    is_parallel : false,
+    timeout: 100)
 
 test('test7b out-of-order (client)',
     python3,
